@@ -1,9 +1,6 @@
-import { Routes, Route, useLocation } from 'react-router'
+import { Routes, Route, useLocation, Navigate } from 'react-router'
 import { AnimatePresence, motion } from 'framer-motion'
 import Navbar from './components/Navbar'
-import Landing from './pages/Landing'
-import HowItWorks from './pages/HowItWorks'
-import DrixApp from './pages/DrixApp'
 import P2PApp from './pages/P2PApp'
 
 function PageWrapper({ children }: { children: React.ReactNode }) {
@@ -21,17 +18,16 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const location = useLocation()
-  const isP2P = location.pathname === '/p2p'
 
   return (
-    <div className={`min-h-screen ${isP2P ? 'p2p-mode' : ''}`} style={{ background: isP2P ? '#0f0d0a' : '#0a0e13', color: isP2P ? '#f2efe8' : '#e8ecf2' }}>
+    <div className="min-h-screen p2p-mode" style={{ background: '#0f0d0a', color: '#f2efe8' }}>
       <Navbar />
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
-          <Route path="/" element={<PageWrapper><Landing /></PageWrapper>} />
-          <Route path="/how-it-works" element={<PageWrapper><HowItWorks /></PageWrapper>} />
-          <Route path="/app" element={<PageWrapper><DrixApp /></PageWrapper>} />
+          <Route path="/" element={<PageWrapper><P2PApp /></PageWrapper>} />
           <Route path="/p2p" element={<PageWrapper><P2PApp /></PageWrapper>} />
+          {/* Any other path redirects to P2P */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AnimatePresence>
     </div>
