@@ -90,7 +90,7 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
           subtitle: 'Show resellers why they should add this vendor to their stack — with data, not guesswork.',
           step1Icon: '1',
           step1Title: 'Who is recruiting and what vendor?',
-          step1Desc: 'Tell us the distributor name, the vendor URL, and optionally a specific solution page.',
+          step1Desc: 'Provide the distributor URL, the vendor URL, and optionally a specific solution page.',
           senderLabel: 'Vendor URL',
           senderPlaceholder: 'vendor.com',
           solutionLabel: 'Target Reseller',
@@ -323,7 +323,7 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
     if (isDistributor) {
       // Distributor validation: need email, distributor name, vendor URL, and either reseller URL or type
       if (!email || !fDistributorName.trim() || !sender) {
-        setError('Fill in email, distributor name, and vendor URL.')
+        setError('Fill in email, distributor URL, and vendor URL.')
         return
       }
       if (!fResellerUrl.trim() && !fResellerType) {
@@ -441,7 +441,7 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
     } finally {
       setRunning(false)
     }
-  }, [demoMode, appState.naics, fEmail, fSender, fSolution, fCustomer, selectedIndustry, fSubindustry, fTitle, fIndividual, fIndividualEmail])
+  }, [demoMode, appState.naics, fEmail, fSender, fSolution, fCustomer, selectedIndustry, fSubindustry, fTitle, fIndividual, fIndividualEmail, fDistributorName, fVendorSolutionUrl, fResellerUrl, fResellerType, fCustomerSize, fSpecificPartner, fSpecificCustomer])
 
   // Expose force-fresh retry on window for the retry button
   useEffect(() => {
@@ -1955,12 +1955,12 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
                   /* ── Distributor: Distributor Name + Vendor URL + Vendor Solution URL ── */
                   <div className="space-y-4">
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Distributor Name <span style={{ color: 'var(--red)' }}>*</span></label>
+                      <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Distributor URL <span style={{ color: 'var(--red)' }}>*</span></label>
                       <input
                         type="text"
                         value={fDistributorName}
                         onChange={(e) => setFDistributorName(e.target.value)}
-                        placeholder="e.g. Pax8, Ingram Micro, TD SYNNEX"
+                        placeholder="e.g. pax8.com, ingrammicro.com"
                         autoFocus
                         className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
                         style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
