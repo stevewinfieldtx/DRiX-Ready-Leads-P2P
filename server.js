@@ -1322,7 +1322,7 @@ app.post('/api/demo-flow', async (req, res) => {
         customer_size: customer_size || null,
         specific_partner: specific_partner || null,
         specific_customer: specific_customer || null,
-        targeting_mode: reseller_type ? 'type' : 'specific'
+        targeting_mode: (reseller_url && reseller_type) ? 'specific_with_type' : reseller_url ? 'specific' : 'type'
       };
     }
     const stratInput = JSON.stringify(stratInputObj);

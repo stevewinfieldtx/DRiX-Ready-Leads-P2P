@@ -228,7 +228,6 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
   // Distributor-specific state
   const [fDistributorName, setFDistributorName] = useState('')
   const [fVendorSolutionUrl, setFVendorSolutionUrl] = useState('')
-  const [fResellerTargetMode, setFResellerTargetMode] = useState<'specific' | 'type'>('specific')
   const [fResellerUrl, setFResellerUrl] = useState('')
   const [fResellerType, setFResellerType] = useState('')
   const [fCustomerSize, setFCustomerSize] = useState('')
@@ -327,12 +326,8 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
         setError('Fill in email, distributor name, and vendor URL.')
         return
       }
-      if (fResellerTargetMode === 'specific' && !fResellerUrl.trim()) {
-        setError('Provide the target reseller URL.')
-        return
-      }
-      if (fResellerTargetMode === 'type' && !fResellerType) {
-        setError('Select a reseller type.')
+      if (!fResellerUrl.trim() && !fResellerType) {
+        setError('Provide a reseller URL, select a reseller type, or both.')
         return
       }
     } else {
@@ -351,7 +346,7 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
       email,
       sender_company_url: sender,
       solution_url: isDistributor
-        ? (fResellerTargetMode === 'specific' ? fResellerUrl.trim() : '')
+        ? (fResellerUrl.trim() || '')
         : solution,
       mode: demoMode === 'demo' ? 'demo' : 'production',
       app_mode: mode,
@@ -362,8 +357,8 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
     if (isDistributor) {
       body.distributor_name = fDistributorName.trim()
       if (fVendorSolutionUrl.trim()) body.vendor_solution_url = fVendorSolutionUrl.trim()
-      if (fResellerTargetMode === 'type') body.reseller_type = fResellerType
-      if (fResellerTargetMode === 'specific') body.reseller_url = fResellerUrl.trim()
+      if (fResellerType) body.reseller_type = fResellerType
+      if (fResellerUrl.trim()) body.reseller_url = fResellerUrl.trim()
       if (fCustomerSize) body.customer_size = fCustomerSize
       if (fSpecificPartner.trim()) body.specific_partner = fSpecificPartner.trim()
       if (fSpecificCustomer.trim()) body.specific_customer = fSpecificCustomer.trim()
@@ -2163,48 +2158,10 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
                         <span className="font-black text-lg" style={{ color: 'var(--bg)' }}>2</span>
                       </div>
                       <h3 className="text-lg font-black mb-1" style={{ color: 'var(--text)' }}>Who are you targeting?</h3>
-                      <p className="text-xs" style={{ color: 'var(--text-dim)' }}>Go after a specific reseller, or target a reseller type.</p>
+                      <p className="text-xs" style={{ color: 'var(--text-dim)' }}>A partner type, a specific reseller, or both. Fill in at least one.</p>
                     </div>
 
-                    {/* Toggle: Specific vs Type */}
-                    <div className="flex rounded-xl overflow-hidden mb-6" style={{ border: '1px solid var(--dx-border)' }}>
-                      <button
-                        onClick={() => setFResellerTargetMode('specific')}
-                        className="flex-1 py-3 text-xs font-bold tracking-wide uppercase transition-all"
-                        style={{
-                          background: fResellerTargetMode === 'specific' ? 'var(--dx-accent)' : 'var(--surface)',
-                          color: fResellerTargetMode === 'specific' ? 'var(--bg)' : 'var(--text-dim)',
-                        }}
-                      >
-                        Specific Reseller
-                      </button>
-                      <button
-                        onClick={() => setFResellerTargetMode('type')}
-                        className="flex-1 py-3 text-xs font-bold tracking-wide uppercase transition-all"
-                        style={{
-                          background: fResellerTargetMode === 'type' ? 'var(--dx-accent)' : 'var(--surface)',
-                          color: fResellerTargetMode === 'type' ? 'var(--bg)' : 'var(--text-dim)',
-                        }}
-                      >
-                        Reseller Type
-                      </button>
-                    </div>
-
-                    {fResellerTargetMode === 'specific' ? (
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Reseller URL</label>
-                        <input
-                          type="text"
-                          value={fResellerUrl}
-                          onChange={(e) => setFResellerUrl(e.target.value)}
-                          placeholder="reseller.com"
-                          autoFocus
-                          className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
-                          style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
-                        />
-                        <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>We'll analyze their current partner stack for competing and complementary technology.</p>
-                      </div>
-                    ) : (
+                    <div className="space-y-4">
                       <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Reseller Type</label>
                         <select
@@ -2222,14 +2179,38 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
                             paddingRight: '32px',
                           }}
                         >
-                          <option value="">Select reseller type...</option>
+                          <option value="">Skip or select...</option>
                           {RESELLER_TYPES.map((t) => (
                             <option key={t} value={t}>{t}</option>
                           ))}
                         </select>
-                        <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>We'll build recruitment strategies tailored to this partner profile.</p>
                       </div>
-                    )}
+                      <div className="flex items-center gap-3 px-2">
+                        <div className="flex-1 h-px" style={{ background: 'var(--dx-border)' }} />
+                        <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>and / or</span>
+                        <div className="flex-1 h-px" style={{ background: 'var(--dx-border)' }} />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Specific Reseller URL</label>
+                        <input
+                          type="text"
+                          value={fResellerUrl}
+                          onChange={(e) => setFResellerUrl(e.target.value)}
+                          placeholder="reseller.com"
+                          className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
+                          style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                        />
+                      </div>
+                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                        {fResellerUrl.trim() && fResellerType
+                          ? `We'll analyze this ${fResellerType.split(' (')[0]}'s stack for competing and complementary technology.`
+                          : fResellerUrl.trim()
+                            ? `We'll analyze their current partner stack for competing and complementary technology.`
+                            : fResellerType
+                              ? `We'll build recruitment strategies tailored to the ${fResellerType.split(' (')[0]} profile.`
+                              : 'Pick a type, enter a URL, or both.'}
+                      </p>
+                    </div>
 
                     <div className="flex items-center justify-between mt-8">
                       <button
@@ -2241,7 +2222,7 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
                       </button>
                       <button
                         onClick={() => setWizardStep(3)}
-                        disabled={fResellerTargetMode === 'specific' ? !fResellerUrl.trim() : !fResellerType}
+                        disabled={!fResellerUrl.trim() && !fResellerType}
                         className="dx-btn-primary px-7 py-3 rounded-xl text-sm font-bold hover:shadow-glow transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                       >
                         Next →
@@ -2466,13 +2447,24 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
                           </div>
                         </>
                       )}
-                      <div className="h-px" style={{ background: 'var(--dx-border)', opacity: 0.5 }} />
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--text-muted)' }}>Target</span>
-                        <span className="font-medium truncate max-w-[200px]" style={{ color: 'var(--cyan)' }}>
-                          {fResellerTargetMode === 'specific' ? fResellerUrl : fResellerType}
-                        </span>
-                      </div>
+                      {fResellerType && (
+                        <>
+                          <div className="h-px" style={{ background: 'var(--dx-border)', opacity: 0.5 }} />
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--text-muted)' }}>Type</span>
+                            <span className="font-medium truncate max-w-[200px]" style={{ color: 'var(--cyan)' }}>{fResellerType.split(' (')[0]}</span>
+                          </div>
+                        </>
+                      )}
+                      {fResellerUrl.trim() && (
+                        <>
+                          <div className="h-px" style={{ background: 'var(--dx-border)', opacity: 0.5 }} />
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--text-muted)' }}>Reseller</span>
+                            <span className="font-medium truncate max-w-[200px]" style={{ color: 'var(--cyan)' }}>{fResellerUrl}</span>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between mt-8">
