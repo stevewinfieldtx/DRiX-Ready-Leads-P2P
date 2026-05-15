@@ -243,10 +243,20 @@ OUTPUT (JSON only):
 
 const DISTRIBUTOR_STRATEGIES_PROMPT = `You are the vendor-recruitment strategy generator for a distributor intelligence platform.
 
-CONTEXT: A distributor wants to recruit a reseller to add a new vendor to their technology stack. Your job is to analyze:
+CONTEXT: A distributor wants to recruit resellers to add a new vendor to their technology stack. Your job is to analyze:
 1. The NEW VENDOR's capabilities, strengths, and market position (provided as "sender" atoms)
-2. The TARGET RESELLER's current business, existing partners, and technology stack (provided as "solution" atoms)
+2. The TARGET RESELLER's current business, existing partners, and technology stack (provided as "solution" atoms — may be a specific company OR a general reseller type like "MSP" or "VAR")
 3. Optionally, the CUSTOMER VERTICAL they'd target together (provided as "customer" atoms)
+
+ADDITIONAL CONTEXT (in "distributor_context" field):
+- distributor_name: the distributor running this recruitment
+- targeting_mode: "specific" (a named reseller with atoms) or "type" (a reseller category like MSP, VAR, MSSP, etc.)
+- reseller_type: if targeting by type, the category (e.g. "MSP (Managed Service Provider)")
+- customer_size: optional target customer size (VSSB, SMB, Mid-Market, Small Enterprise)
+- specific_partner: optional specific partner name/URL to consider
+- specific_customer: optional specific end-customer name/URL to consider
+
+When targeting_mode is "type", the solution atoms will be minimal. You must use your knowledge of that reseller type's typical business model, partner stack, and customer base to generate meaningful strategies. When targeting_mode is "specific", analyze the actual atoms.
 
 YOUR CRITICAL ANALYSIS TASKS:
 A) COMPETING TECHNOLOGY: Scan the reseller's atoms for any existing vendor relationships, technology partnerships, or solutions that COMPETE with the new vendor. For each competing tech found:
@@ -1057,17 +1067,27 @@ app.post('/api/demo-flow', async (req, res) => {
     mode,
     app_mode,
     sender_extra_urls,
-    solution_extra_urls
+    solution_extra_urls,
+    // Distributor-specific fields
+    distributor_name,
+    vendor_solution_url,
+    reseller_type,
+    reseller_url,
+    customer_size,
+    specific_partner,
+    specific_customer
   } = req.body || {};
   const isDemo = mode === 'demo';
   const DEMO_ATOMS_PER_CATEGORY = 20;
+  const isDistributorMode = app_mode === 'distributor';
 
   // Validation — per DRiX pitch cascade spec, only Reseller + Solution are
   // required. Industry / Subindustry / Title / Company URL / Individual are
   // optional. If a variable is not provided, it is ignored — no fabrication.
   if (!email) return res.status(400).json({ error: 'Require email (your email)' });
   if (!sender_company_url) return res.status(400).json({ error: 'Require sender_company_url' });
-  if (!solution_url) return res.status(400).json({ error: 'Require solution_url' });
+  // Distributor mode can run without solution_url (when targeting by type)
+  if (!isDistributorMode && !solution_url) return res.status(400).json({ error: 'Require solution_url' });
   if (!OPENROUTER_API_KEY) return res.status(500).json({ error: 'Server not configured — missing OPENROUTER_API_KEY' });
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -1089,7 +1109,27 @@ app.post('/api/demo-flow', async (req, res) => {
 
     // Primary URLs
     const senderPromise   = ingestOne({ url: normUrl(sender_company_url), role: 'sender', demoMode: isDemo });
-    const solutionPromise = ingestOne({ url: normUrl(solution_url),       role: 'solution', demoMode: isDemo });
+
+    // Vendor solution URL (distributor mode) — ingest alongside main vendor URL
+    const vendorSolutionPromise = (isDistributorMode && vendor_solution_url)
+      ? ingestOne({ url: normUrl(vendor_solution_url), role: 'sender', demoMode: isDemo }).catch(err => {
+          console.warn(`[demo-flow] vendor solution URL failed (non-blocking): ${vendor_solution_url} — ${err.message}`);
+          return null;
+        })
+      : null;
+
+    // Solution/reseller — if distributor targeting by type (no URL), synthesize a placeholder
+    const solutionPromise = solution_url
+      ? ingestOne({ url: normUrl(solution_url), role: 'solution', demoMode: isDemo })
+      : (isDistributorMode && reseller_type)
+        ? Promise.resolve({
+            target: { name: reseller_type, url: null, role: 'solution', is_archetype: true },
+            summary: `Target profile: ${reseller_type}. This is a general reseller type profile — the distributor (${distributor_name || 'unnamed'}) wants to recruit ${reseller_type}s to sell the vendor's solutions.${customer_size ? ' Target customer size: ' + customer_size + '.' : ''}`,
+            atoms: [],
+            source: 'reseller_type_archetype',
+            ingested_at: new Date().toISOString()
+          })
+        : ingestOne({ url: normUrl(solution_url), role: 'solution', demoMode: isDemo });
 
     // Extra URLs (P2P multi-URL support) — ingest in parallel with the primaries
     const senderExtraPromises = Array.isArray(sender_extra_urls)
@@ -1120,10 +1160,14 @@ app.post('/api/demo-flow', async (req, res) => {
           });
 
     // Settle individually so one failure doesn't kill the rest
-    const [senderRes, solutionRes, customerRes, ...extraResults] = await Promise.allSettled([
+    const allPromises = [
       senderPromise, solutionPromise, customerPromise,
       ...senderExtraPromises, ...solutionExtraPromises
-    ]);
+    ];
+    if (vendorSolutionPromise) allPromises.push(vendorSolutionPromise);
+
+    const allResults = await Promise.allSettled(allPromises);
+    const [senderRes, solutionRes, customerRes, ...extraResults] = allResults;
 
     if (senderRes.status === 'rejected')   throw new Error(`Sender: ${senderRes.reason.message}`);
     if (solutionRes.status === 'rejected') throw new Error(`Solution: ${solutionRes.reason.message}`);
@@ -1148,6 +1192,16 @@ app.post('/api/demo-flow', async (req, res) => {
       if (r && r.status === 'fulfilled' && r.value && r.value.atoms) {
         solution.atoms = [...(solution.atoms || []), ...r.value.atoms];
         solution.summary = (solution.summary || '') + '\n\n[Additional source: ' + (r.value.target?.url || 'extra URL') + ']\n' + (r.value.summary || '');
+      }
+    }
+    // Merge vendor solution URL atoms into sender (distributor mode)
+    if (vendorSolutionPromise) {
+      const vsIdx = senderExtraCount + solutionExtraCount;
+      const vsRes = extraResults[vsIdx];
+      if (vsRes && vsRes.status === 'fulfilled' && vsRes.value && vsRes.value.atoms) {
+        sender.atoms = [...(sender.atoms || []), ...vsRes.value.atoms];
+        sender.summary = (sender.summary || '') + '\n\n[Vendor Solution: ' + (vsRes.value.target?.url || vendor_solution_url) + ']\n' + (vsRes.value.summary || '');
+        console.log(`[demo-flow] merged vendor solution URL atoms (${vsRes.value.atoms.length} atoms)`);
       }
     }
     if (senderExtraCount + solutionExtraCount > 0) {
@@ -1253,13 +1307,25 @@ app.post('/api/demo-flow', async (req, res) => {
     const hasValidStrategies = (obj) => Array.isArray(obj?.strategies) && obj.strategies.length > 0;
 
     // Build the input once (shared by all attempts)
-    const stratInput = JSON.stringify({
+    const stratInputObj = {
       sender:   { name: sender.target?.name,   summary: sender.summary,   atoms: sender.atoms },
       solution: { name: solution.target?.name, summary: solution.summary, atoms: solution.atoms },
       customer: { name: customer.target?.name, summary: customer.summary, atoms: customer.atoms, is_archetype: !!customer.target?.is_archetype },
       individual: individual ? { name: individual.target?.name, summary: individual.summary, atoms: individual.atoms, accounts: (individual.scan?.accounts || []).map(a => ({ site: a.site, url: a.url })) } : null,
       recipient_role: recipient_role || 'Senior executive'
-    });
+    };
+    // Inject distributor-specific context for the LLM
+    if (isDistributorMode) {
+      stratInputObj.distributor_context = {
+        distributor_name: distributor_name || '',
+        reseller_type: reseller_type || null,
+        customer_size: customer_size || null,
+        specific_partner: specific_partner || null,
+        specific_customer: specific_customer || null,
+        targeting_mode: reseller_type ? 'type' : 'specific'
+      };
+    }
+    const stratInput = JSON.stringify(stratInputObj);
 
     // 1. In-memory cache (skip if force_fresh)
     if (!forceFresh && strategyCache.has(sk) && hasValidStrategies(strategyCache.get(sk))) {

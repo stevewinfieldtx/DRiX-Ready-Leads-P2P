@@ -89,9 +89,9 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
           headingAccent: 'Intelligence',
           subtitle: 'Show resellers why they should add this vendor to their stack — with data, not guesswork.',
           step1Icon: '1',
-          step1Title: 'Enter the vendor and target reseller',
-          step1Desc: 'Provide URLs where we can find information about each.',
-          senderLabel: 'New Vendor',
+          step1Title: 'Who is recruiting and what vendor?',
+          step1Desc: 'Tell us the distributor name, the vendor URL, and optionally a specific solution page.',
+          senderLabel: 'Vendor URL',
           senderPlaceholder: 'vendor.com',
           solutionLabel: 'Target Reseller',
           solutionPlaceholder: 'reseller.com',
@@ -102,7 +102,7 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
           atomCustomerLabel: 'Customer / Vertical',
           stratSenderContrib: 'Vendor provides',
           stratSolutionContrib: 'Reseller gains',
-          depthLabels: ['VENDOR', 'RESELLER', 'INDUSTRY', 'TITLE', 'COMPANY', 'INDIVIDUAL'] as const,
+          depthLabels: ['DISTRIBUTOR', 'VENDOR', 'RESELLER', 'CUSTOMER', 'INDUSTRY', 'SIZE'] as const,
           reviewSenderLabel: 'Vendor',
           reviewSolutionLabel: 'Reseller',
           footer: 'DRiX Distributor · Vendor Recruitment Intelligence · by WinTech Partners',
@@ -225,6 +225,34 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
   const [fSenderExtraUrls, setFSenderExtraUrls] = useState<string[]>([])
   const [fSolutionExtraUrls, setFSolutionExtraUrls] = useState<string[]>([])
 
+  // Distributor-specific state
+  const [fDistributorName, setFDistributorName] = useState('')
+  const [fVendorSolutionUrl, setFVendorSolutionUrl] = useState('')
+  const [fResellerTargetMode, setFResellerTargetMode] = useState<'specific' | 'type'>('specific')
+  const [fResellerUrl, setFResellerUrl] = useState('')
+  const [fResellerType, setFResellerType] = useState('')
+  const [fCustomerSize, setFCustomerSize] = useState('')
+  const [fSpecificPartner, setFSpecificPartner] = useState('')
+  const [fSpecificCustomer, setFSpecificCustomer] = useState('')
+
+  const RESELLER_TYPES = [
+    'MSP (Managed Service Provider)',
+    'VAR (Value Added Reseller)',
+    'MSSP (Managed Security Service Provider)',
+    'System Integrator',
+    'Reseller',
+    'CSP (Cloud Solution Provider)',
+    'Consultant / Advisory',
+    'Agent / Broker',
+  ]
+
+  const CUSTOMER_SIZES = [
+    'VSSB (Very Small Business)',
+    'SMB (Small & Medium Business)',
+    'Mid-Market',
+    'Small Enterprise',
+  ]
+
   // (All inputs are now controlled — no refs needed)
 
   // ─── BOOT ───────────────────────────────────────────────────────────────
@@ -293,11 +321,26 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
     const sender = fSender.trim()
     const solution = fSolution.trim()
 
-    if (!email || !sender || !solution) {
-      setError(isP2P ? 'Fill in email, Partner A URL, and Partner B URL.'
-        : isDistributor ? 'Fill in email, Vendor URL, and Reseller URL.'
-        : 'Fill in email, your company URL, and the solution URL.')
-      return
+    if (isDistributor) {
+      // Distributor validation: need email, distributor name, vendor URL, and either reseller URL or type
+      if (!email || !fDistributorName.trim() || !sender) {
+        setError('Fill in email, distributor name, and vendor URL.')
+        return
+      }
+      if (fResellerTargetMode === 'specific' && !fResellerUrl.trim()) {
+        setError('Provide the target reseller URL.')
+        return
+      }
+      if (fResellerTargetMode === 'type' && !fResellerType) {
+        setError('Select a reseller type.')
+        return
+      }
+    } else {
+      if (!email || !sender || !solution) {
+        setError(isP2P ? 'Fill in email, Partner A URL, and Partner B URL.'
+          : 'Fill in email, your company URL, and the solution URL.')
+        return
+      }
     }
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       setError('Email looks invalid.')
@@ -307,14 +350,27 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
     const body: any = {
       email,
       sender_company_url: sender,
-      solution_url: solution,
+      solution_url: isDistributor
+        ? (fResellerTargetMode === 'specific' ? fResellerUrl.trim() : '')
+        : solution,
       mode: demoMode === 'demo' ? 'demo' : 'production',
       app_mode: mode,
       ...(forceFresh ? { force_fresh: true } : {}),
     }
 
-    // Multi-URL support: attach extra URLs for each partner/vendor
-    if (isSpecialMode) {
+    // Distributor-specific fields
+    if (isDistributor) {
+      body.distributor_name = fDistributorName.trim()
+      if (fVendorSolutionUrl.trim()) body.vendor_solution_url = fVendorSolutionUrl.trim()
+      if (fResellerTargetMode === 'type') body.reseller_type = fResellerType
+      if (fResellerTargetMode === 'specific') body.reseller_url = fResellerUrl.trim()
+      if (fCustomerSize) body.customer_size = fCustomerSize
+      if (fSpecificPartner.trim()) body.specific_partner = fSpecificPartner.trim()
+      if (fSpecificCustomer.trim()) body.specific_customer = fSpecificCustomer.trim()
+    }
+
+    // Multi-URL support: attach extra URLs for each partner (P2P only)
+    if (isP2P) {
       const sExtra = fSenderExtraUrls.map(u => u.trim()).filter(Boolean)
       const solExtra = fSolutionExtraUrls.map(u => u.trim()).filter(Boolean)
       if (sExtra.length) body.sender_extra_urls = sExtra
@@ -1827,7 +1883,7 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
           <div className="relative overflow-hidden min-h-[280px]">
             {/* Progress dots */}
             <div className="flex items-center justify-center gap-2 mb-8">
-              {[0, 1, 2, 3, 4, 5].map((s) => (
+              {(isDistributor ? [0, 1, 2, 3] : [0, 1, 2, 3, 4, 5]).map((s) => (
                 <div
                   key={s}
                   className={`h-1.5 rounded-full transition-all duration-500 ${
@@ -1873,7 +1929,7 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
               </motion.div>
             )}
 
-            {/* Step 1: Reseller + Solution (required) */}
+            {/* Step 1: Sender + Solution / Distributor Vendor Info */}
             {wizardStep === 1 && (
               <motion.div
                 key="step1"
@@ -1881,7 +1937,7 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -40 }}
                 transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
-                className={isSpecialMode ? 'max-w-2xl mx-auto' : 'max-w-lg mx-auto'}
+                className={isP2P ? 'max-w-2xl mx-auto' : 'max-w-lg mx-auto'}
               >
                 <div className="text-center mb-6">
                   <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4 shadow-lg ${
@@ -1893,20 +1949,59 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
                   </div>
                   <h3 className="text-lg font-black mb-1" style={{ color: 'var(--text)' }}>{L.step1Title}</h3>
                   <p className="text-xs" style={{ color: 'var(--text-dim)' }}>{L.step1Desc}</p>
-                  {isSpecialMode && (
+                  {isP2P && (
                     <p className="text-[11px] mt-2 max-w-lg mx-auto leading-relaxed" style={{ color: 'var(--text-muted)' }}>
                       Provide any URL where we can find information — company website, product pages, YouTube videos, partner portals, press releases. Add as many as you need. YouTube URLs work but will take longer to process.
                     </p>
                   )}
                 </div>
 
-                {isSpecialMode ? (
-                  /* ── Side-by-side panels with multi-URL ── */
+                {isDistributor ? (
+                  /* ── Distributor: Distributor Name + Vendor URL + Vendor Solution URL ── */
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Distributor Name <span style={{ color: 'var(--red)' }}>*</span></label>
+                      <input
+                        type="text"
+                        value={fDistributorName}
+                        onChange={(e) => setFDistributorName(e.target.value)}
+                        placeholder="e.g. Pax8, Ingram Micro, TD SYNNEX"
+                        autoFocus
+                        className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
+                        style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                      />
+                    </div>
+                    <div className="h-px" style={{ background: 'var(--dx-border)', opacity: 0.5 }} />
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Vendor URL <span style={{ color: 'var(--red)' }}>*</span></label>
+                      <input
+                        type="text"
+                        value={fSender}
+                        onChange={(e) => setFSender(e.target.value)}
+                        placeholder="vendor.com"
+                        className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
+                        style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Vendor Solution URL <span className="text-[9px] font-normal tracking-normal normal-case" style={{ color: 'var(--text-muted)' }}>(optional — a specific product or solution page)</span></label>
+                      <input
+                        type="text"
+                        value={fVendorSolutionUrl}
+                        onChange={(e) => setFVendorSolutionUrl(e.target.value)}
+                        placeholder="vendor.com/products/specific-solution"
+                        className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
+                        style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                      />
+                    </div>
+                  </div>
+                ) : isP2P ? (
+                  /* ── P2P: Side-by-side panels with multi-URL ── */
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Sender panel */}
                     <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--dx-border)' }}>
                       <div className="flex items-center gap-2 mb-3">
-                        <span className="text-[10px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded-md" style={{ background: isDistributor ? 'rgba(220,38,38,0.15)' : 'rgba(230,163,23,0.15)', color: 'var(--dx-accent)' }}>{L.atomSenderLabel}</span>
+                        <span className="text-[10px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded-md" style={{ background: 'rgba(230,163,23,0.15)', color: 'var(--dx-accent)' }}>{L.atomSenderLabel}</span>
                       </div>
                       <div className="flex flex-col gap-1.5 mb-3">
                         <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Primary URL <span style={{ color: 'var(--red)' }}>*</span></label>
@@ -1951,7 +2046,7 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
                     {/* Solution panel */}
                     <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--dx-border)' }}>
                       <div className="flex items-center gap-2 mb-3">
-                        <span className="text-[10px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded-md" style={{ background: isDistributor ? 'rgba(148,163,184,0.15)' : 'rgba(23,195,178,0.15)', color: isDistributor ? 'var(--cyan)' : 'var(--cyan)' }}>{L.atomSolutionLabel}</span>
+                        <span className="text-[10px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded-md" style={{ background: 'rgba(23,195,178,0.15)', color: 'var(--cyan)' }}>{L.atomSolutionLabel}</span>
                       </div>
                       <div className="flex flex-col gap-1.5 mb-3">
                         <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Primary URL <span style={{ color: 'var(--red)' }}>*</span></label>
@@ -2029,18 +2124,28 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
                   >
                     ← Back
                   </button>
-                  <button
-                    onClick={() => fSender.trim() && fSolution.trim() && setWizardStep(2)}
-                    disabled={!fSender.trim() || !fSolution.trim()}
-                    className="dx-btn-green px-7 py-3 rounded-xl text-sm font-bold hover:shadow-glow transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                  >
-                    Next →
-                  </button>
+                  {isDistributor ? (
+                    <button
+                      onClick={() => fDistributorName.trim() && fSender.trim() && setWizardStep(2)}
+                      disabled={!fDistributorName.trim() || !fSender.trim()}
+                      className="dx-btn-primary px-7 py-3 rounded-xl text-sm font-bold hover:shadow-glow transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                    >
+                      Next →
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => fSender.trim() && fSolution.trim() && setWizardStep(2)}
+                      disabled={!fSender.trim() || !fSolution.trim()}
+                      className="dx-btn-green px-7 py-3 rounded-xl text-sm font-bold hover:shadow-glow transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                    >
+                      Next →
+                    </button>
+                  )}
                 </div>
               </motion.div>
             )}
 
-            {/* Step 2: Industry + Subindustry */}
+            {/* Step 2: Distributor=Reseller Targeting | Standard/P2P=Industry */}
             {wizardStep === 2 && (
               <motion.div
                 key="step2"
@@ -2050,79 +2155,177 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
                 transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
                 className="max-w-lg mx-auto"
               >
-                <div className="text-center mb-6">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-drix-cyan to-drix-accent mb-4 shadow-lg">
-                    <span className="text-drix-bg font-black text-lg">2</span>
-                  </div>
-                  <h3 className="text-lg font-black text-drix-text mb-1">What industry are they in?</h3>
-                  <p className="text-xs text-drix-dim">Optional — narrows the intelligence to their market.</p>
-                </div>
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-extrabold tracking-widest uppercase text-drix-muted">Industry</label>
-                    <select
-                      value={selectedIndustry}
-                      onChange={(e) => onIndustryChange(e.target.value)}
-                      className="bg-drix-surface2 border border-drix-border rounded-xl px-4 py-3 text-sm text-drix-text outline-none focus:border-drix-cyan focus:shadow-[0_0_20px_rgba(90,212,255,0.15)] transition-all h-[46px] appearance-none cursor-pointer"
-                      style={{
-                        backgroundImage: `linear-gradient(45deg,transparent 50%,var(--text-dim) 50%),linear-gradient(135deg,var(--text-dim) 50%,transparent 50%)`,
-                        backgroundPosition: `calc(100% - 18px) 50%, calc(100% - 13px) 50%`,
-                        backgroundSize: '5px 5px',
-                        backgroundRepeat: 'no-repeat',
-                        paddingRight: '32px',
-                      }}
-                    >
-                      <option value="">{appState.naics ? 'Skip or select...' : 'Loading industries...'}</option>
-                      {appState.naics?.map((sec) => (
-                        <option key={sec.code} value={sec.code}>{sec.code} — {sec.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {selectedIndustry && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      className="flex flex-col gap-1.5"
-                    >
-                      <label className="text-[10px] font-extrabold tracking-widest uppercase text-drix-muted">Subindustry</label>
-                      <select
-                        value={fSubindustry}
-                        onChange={(e) => setFSubindustry(e.target.value)}
-                        className="bg-drix-surface2 border border-drix-border rounded-xl px-4 py-3 text-sm text-drix-text outline-none focus:border-drix-cyan focus:shadow-[0_0_20px_rgba(90,212,255,0.15)] transition-all h-[46px] appearance-none cursor-pointer"
+                {isDistributor ? (
+                  /* ── Distributor Step 2: Reseller Targeting ── */
+                  <>
+                    <div className="text-center mb-6">
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-[#dc2626] to-[#94a3b8] mb-4 shadow-lg">
+                        <span className="font-black text-lg" style={{ color: 'var(--bg)' }}>2</span>
+                      </div>
+                      <h3 className="text-lg font-black mb-1" style={{ color: 'var(--text)' }}>Who are you targeting?</h3>
+                      <p className="text-xs" style={{ color: 'var(--text-dim)' }}>Go after a specific reseller, or target a reseller type.</p>
+                    </div>
+
+                    {/* Toggle: Specific vs Type */}
+                    <div className="flex rounded-xl overflow-hidden mb-6" style={{ border: '1px solid var(--dx-border)' }}>
+                      <button
+                        onClick={() => setFResellerTargetMode('specific')}
+                        className="flex-1 py-3 text-xs font-bold tracking-wide uppercase transition-all"
                         style={{
-                          backgroundImage: `linear-gradient(45deg,transparent 50%,var(--text-dim) 50%),linear-gradient(135deg,var(--text-dim) 50%,transparent 50%)`,
-                          backgroundPosition: `calc(100% - 18px) 50%, calc(100% - 13px) 50%`,
-                          backgroundSize: '5px 5px',
-                          backgroundRepeat: 'no-repeat',
-                          paddingRight: '32px',
+                          background: fResellerTargetMode === 'specific' ? 'var(--dx-accent)' : 'var(--surface)',
+                          color: fResellerTargetMode === 'specific' ? 'var(--bg)' : 'var(--text-dim)',
                         }}
                       >
-                        <option value="">Select subindustry...</option>
-                        {subindustryOptions.map((s) => (
-                          <option key={s.code} value={s.code}>{s.code} — {s.name}</option>
-                        ))}
-                      </select>
-                    </motion.div>
-                  )}
-                </div>
-                <div className="flex items-center justify-between mt-8">
-                  <button
-                    onClick={() => setWizardStep(1)}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold border border-drix-border text-drix-dim hover:text-drix-text hover:border-drix-accent/50 transition-all"
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    onClick={() => setWizardStep(3)}
-                    className="dx-btn-cyan px-7 py-3 rounded-xl text-sm font-bold hover:shadow-glow transition-all hover:-translate-y-0.5"
-                  >
-                    {selectedIndustry ? 'Next →' : 'Skip →'}
-                  </button>
-                </div>
+                        Specific Reseller
+                      </button>
+                      <button
+                        onClick={() => setFResellerTargetMode('type')}
+                        className="flex-1 py-3 text-xs font-bold tracking-wide uppercase transition-all"
+                        style={{
+                          background: fResellerTargetMode === 'type' ? 'var(--dx-accent)' : 'var(--surface)',
+                          color: fResellerTargetMode === 'type' ? 'var(--bg)' : 'var(--text-dim)',
+                        }}
+                      >
+                        Reseller Type
+                      </button>
+                    </div>
+
+                    {fResellerTargetMode === 'specific' ? (
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Reseller URL</label>
+                        <input
+                          type="text"
+                          value={fResellerUrl}
+                          onChange={(e) => setFResellerUrl(e.target.value)}
+                          placeholder="reseller.com"
+                          autoFocus
+                          className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
+                          style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                        />
+                        <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>We'll analyze their current partner stack for competing and complementary technology.</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Reseller Type</label>
+                        <select
+                          value={fResellerType}
+                          onChange={(e) => setFResellerType(e.target.value)}
+                          className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px] appearance-none cursor-pointer"
+                          style={{
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--dx-border)',
+                            color: 'var(--text)',
+                            backgroundImage: `linear-gradient(45deg,transparent 50%,var(--text-dim) 50%),linear-gradient(135deg,var(--text-dim) 50%,transparent 50%)`,
+                            backgroundPosition: `calc(100% - 18px) 50%, calc(100% - 13px) 50%`,
+                            backgroundSize: '5px 5px',
+                            backgroundRepeat: 'no-repeat',
+                            paddingRight: '32px',
+                          }}
+                        >
+                          <option value="">Select reseller type...</option>
+                          {RESELLER_TYPES.map((t) => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                        <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>We'll build recruitment strategies tailored to this partner profile.</p>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between mt-8">
+                      <button
+                        onClick={() => setWizardStep(1)}
+                        className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all"
+                        style={{ border: '1px solid var(--dx-border)', color: 'var(--text-dim)' }}
+                      >
+                        ← Back
+                      </button>
+                      <button
+                        onClick={() => setWizardStep(3)}
+                        disabled={fResellerTargetMode === 'specific' ? !fResellerUrl.trim() : !fResellerType}
+                        className="dx-btn-primary px-7 py-3 rounded-xl text-sm font-bold hover:shadow-glow transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  /* ── Standard/P2P Step 2: Industry ── */
+                  <>
+                    <div className="text-center mb-6">
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-drix-cyan to-drix-accent mb-4 shadow-lg">
+                        <span className="text-drix-bg font-black text-lg">2</span>
+                      </div>
+                      <h3 className="text-lg font-black text-drix-text mb-1">What industry are they in?</h3>
+                      <p className="text-xs text-drix-dim">Optional — narrows the intelligence to their market.</p>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-extrabold tracking-widest uppercase text-drix-muted">Industry</label>
+                        <select
+                          value={selectedIndustry}
+                          onChange={(e) => onIndustryChange(e.target.value)}
+                          className="bg-drix-surface2 border border-drix-border rounded-xl px-4 py-3 text-sm text-drix-text outline-none focus:border-drix-cyan focus:shadow-[0_0_20px_rgba(90,212,255,0.15)] transition-all h-[46px] appearance-none cursor-pointer"
+                          style={{
+                            backgroundImage: `linear-gradient(45deg,transparent 50%,var(--text-dim) 50%),linear-gradient(135deg,var(--text-dim) 50%,transparent 50%)`,
+                            backgroundPosition: `calc(100% - 18px) 50%, calc(100% - 13px) 50%`,
+                            backgroundSize: '5px 5px',
+                            backgroundRepeat: 'no-repeat',
+                            paddingRight: '32px',
+                          }}
+                        >
+                          <option value="">{appState.naics ? 'Skip or select...' : 'Loading industries...'}</option>
+                          {appState.naics?.map((sec) => (
+                            <option key={sec.code} value={sec.code}>{sec.code} — {sec.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {selectedIndustry && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          className="flex flex-col gap-1.5"
+                        >
+                          <label className="text-[10px] font-extrabold tracking-widest uppercase text-drix-muted">Subindustry</label>
+                          <select
+                            value={fSubindustry}
+                            onChange={(e) => setFSubindustry(e.target.value)}
+                            className="bg-drix-surface2 border border-drix-border rounded-xl px-4 py-3 text-sm text-drix-text outline-none focus:border-drix-cyan focus:shadow-[0_0_20px_rgba(90,212,255,0.15)] transition-all h-[46px] appearance-none cursor-pointer"
+                            style={{
+                              backgroundImage: `linear-gradient(45deg,transparent 50%,var(--text-dim) 50%),linear-gradient(135deg,var(--text-dim) 50%,transparent 50%)`,
+                              backgroundPosition: `calc(100% - 18px) 50%, calc(100% - 13px) 50%`,
+                              backgroundSize: '5px 5px',
+                              backgroundRepeat: 'no-repeat',
+                              paddingRight: '32px',
+                            }}
+                          >
+                            <option value="">Select subindustry...</option>
+                            {subindustryOptions.map((s) => (
+                              <option key={s.code} value={s.code}>{s.code} — {s.name}</option>
+                            ))}
+                          </select>
+                        </motion.div>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-8">
+                      <button
+                        onClick={() => setWizardStep(1)}
+                        className="px-5 py-2.5 rounded-xl text-xs font-bold border border-drix-border text-drix-dim hover:text-drix-text hover:border-drix-accent/50 transition-all"
+                      >
+                        ← Back
+                      </button>
+                      <button
+                        onClick={() => setWizardStep(3)}
+                        className="dx-btn-cyan px-7 py-3 rounded-xl text-sm font-bold hover:shadow-glow transition-all hover:-translate-y-0.5"
+                      >
+                        {selectedIndustry ? 'Next →' : 'Skip →'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </motion.div>
             )}
 
-            {/* Step 3: Title + Company URL */}
+            {/* Step 3: Distributor=Customer Context+Launch | Standard/P2P=Title+Company */}
             {wizardStep === 3 && (
               <motion.div
                 key="step3"
@@ -2132,55 +2335,218 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
                 transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
                 className="max-w-lg mx-auto"
               >
-                <div className="text-center mb-6">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-drix-purple to-drix-pink mb-4 shadow-lg">
-                    <span className="text-drix-bg font-black text-lg">3</span>
-                  </div>
-                  <h3 className="text-lg font-black mb-1" style={{ color: 'var(--text)' }}>{isP2P ? 'Who are you targeting together?' : isDistributor ? 'Which customer vertical are you targeting?' : 'Who are you selling to?'}</h3>
-                  <p className="text-xs" style={{ color: 'var(--text-dim)' }}>{isP2P ? 'Optional — helps the tool find joint opportunities.' : isDistributor ? 'Optional — helps show the reseller where the vendor fits.' : 'Optional — the more specific, the sharper the intelligence.'}</p>
-                </div>
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-extrabold tracking-widest uppercase text-drix-muted">Buyer Title / Persona</label>
-                    <input
-                      type="text"
-                      value={fTitle}
-                      onChange={(e) => { setFTitle(e.target.value); updateDepth('title', e.target.value) }}
-                      placeholder="e.g. VP of IT, CISO, CFO"
-                      autoFocus
-                      className="bg-drix-surface2 border border-drix-border rounded-xl px-4 py-3 text-sm text-drix-text outline-none focus:border-drix-purple focus:shadow-[0_0_20px_rgba(181,131,255,0.15)] transition-all h-[46px]"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-extrabold tracking-widest uppercase text-drix-muted">Company URL</label>
-                    <input
-                      type="text"
-                      value={fCustomer}
-                      onChange={(e) => { setFCustomer(e.target.value); updateDepth('company', e.target.value) }}
-                      placeholder="customer.com"
-                      className="bg-drix-surface2 border border-drix-border rounded-xl px-4 py-3 text-sm text-drix-text outline-none focus:border-drix-purple focus:shadow-[0_0_20px_rgba(181,131,255,0.15)] transition-all h-[46px]"
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between mt-8">
-                  <button
-                    onClick={() => setWizardStep(2)}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold border border-drix-border text-drix-dim hover:text-drix-text hover:border-drix-accent/50 transition-all"
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    onClick={() => setWizardStep(4)}
-                    className="dx-btn-purple-pink px-7 py-3 rounded-xl text-sm font-bold hover:shadow-glow transition-all hover:-translate-y-0.5"
-                  >
-                    {(fTitle || fCustomer) ? 'Next →' : 'Skip →'}
-                  </button>
-                </div>
+                {isDistributor ? (
+                  /* ── Distributor Step 3: Customer Context + Launch ── */
+                  <>
+                    <div className="text-center mb-6">
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-[#dc2626] to-[#94a3b8] mb-4 shadow-lg">
+                        <span className="font-black text-lg" style={{ color: 'var(--bg)' }}>3</span>
+                      </div>
+                      <h3 className="text-lg font-black mb-1" style={{ color: 'var(--text)' }}>Who are the potential customers?</h3>
+                      <p className="text-xs" style={{ color: 'var(--text-dim)' }}>All optional — helps tailor the recruitment pitch to real opportunities.</p>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Customer Size</label>
+                        <select
+                          value={fCustomerSize}
+                          onChange={(e) => setFCustomerSize(e.target.value)}
+                          className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px] appearance-none cursor-pointer"
+                          style={{
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--dx-border)',
+                            color: 'var(--text)',
+                            backgroundImage: `linear-gradient(45deg,transparent 50%,var(--text-dim) 50%),linear-gradient(135deg,var(--text-dim) 50%,transparent 50%)`,
+                            backgroundPosition: `calc(100% - 18px) 50%, calc(100% - 13px) 50%`,
+                            backgroundSize: '5px 5px',
+                            backgroundRepeat: 'no-repeat',
+                            paddingRight: '32px',
+                          }}
+                        >
+                          <option value="">Skip or select...</option>
+                          {CUSTOMER_SIZES.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Industry</label>
+                        <select
+                          value={selectedIndustry}
+                          onChange={(e) => onIndustryChange(e.target.value)}
+                          className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px] appearance-none cursor-pointer"
+                          style={{
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--dx-border)',
+                            color: 'var(--text)',
+                            backgroundImage: `linear-gradient(45deg,transparent 50%,var(--text-dim) 50%),linear-gradient(135deg,var(--text-dim) 50%,transparent 50%)`,
+                            backgroundPosition: `calc(100% - 18px) 50%, calc(100% - 13px) 50%`,
+                            backgroundSize: '5px 5px',
+                            backgroundRepeat: 'no-repeat',
+                            paddingRight: '32px',
+                          }}
+                        >
+                          <option value="">{appState.naics ? 'Skip or select...' : 'Loading industries...'}</option>
+                          {appState.naics?.map((sec) => (
+                            <option key={sec.code} value={sec.code}>{sec.code} — {sec.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {selectedIndustry && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          className="flex flex-col gap-1.5"
+                        >
+                          <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Sub-Industry</label>
+                          <select
+                            value={fSubindustry}
+                            onChange={(e) => setFSubindustry(e.target.value)}
+                            className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px] appearance-none cursor-pointer"
+                            style={{
+                              background: 'var(--surface-2)',
+                              border: '1px solid var(--dx-border)',
+                              color: 'var(--text)',
+                              backgroundImage: `linear-gradient(45deg,transparent 50%,var(--text-dim) 50%),linear-gradient(135deg,var(--text-dim) 50%,transparent 50%)`,
+                              backgroundPosition: `calc(100% - 18px) 50%, calc(100% - 13px) 50%`,
+                              backgroundSize: '5px 5px',
+                              backgroundRepeat: 'no-repeat',
+                              paddingRight: '32px',
+                            }}
+                          >
+                            <option value="">Select sub-industry...</option>
+                            {subindustryOptions.map((s) => (
+                              <option key={s.code} value={s.code}>{s.code} — {s.name}</option>
+                            ))}
+                          </select>
+                        </motion.div>
+                      )}
+                      <div className="h-px" style={{ background: 'var(--dx-border)', opacity: 0.5 }} />
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Specific Partner <span className="text-[9px] font-normal tracking-normal normal-case">(name or URL)</span></label>
+                        <input
+                          type="text"
+                          value={fSpecificPartner}
+                          onChange={(e) => setFSpecificPartner(e.target.value)}
+                          placeholder="e.g. Acme Corp or acme.com"
+                          className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
+                          style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Specific Customer <span className="text-[9px] font-normal tracking-normal normal-case">(name or URL)</span></label>
+                        <input
+                          type="text"
+                          value={fSpecificCustomer}
+                          onChange={(e) => setFSpecificCustomer(e.target.value)}
+                          placeholder="e.g. Target Corp or target.com"
+                          className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
+                          style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Review summary */}
+                    <div className="mt-6 space-y-2 rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--dx-border)' }}>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--text-muted)' }}>Distributor</span>
+                        <span className="font-medium truncate max-w-[200px]" style={{ color: 'var(--dx-accent)' }}>{fDistributorName}</span>
+                      </div>
+                      <div className="h-px" style={{ background: 'var(--dx-border)', opacity: 0.5 }} />
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--text-muted)' }}>Vendor</span>
+                        <span className="font-medium truncate max-w-[200px]" style={{ color: 'var(--text)' }}>{fSender}</span>
+                      </div>
+                      {fVendorSolutionUrl && (
+                        <>
+                          <div className="h-px" style={{ background: 'var(--dx-border)', opacity: 0.5 }} />
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--text-muted)' }}>Solution</span>
+                            <span className="font-medium truncate max-w-[200px]" style={{ color: 'var(--text)' }}>{fVendorSolutionUrl}</span>
+                          </div>
+                        </>
+                      )}
+                      <div className="h-px" style={{ background: 'var(--dx-border)', opacity: 0.5 }} />
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-xs uppercase tracking-wider font-semibold" style={{ color: 'var(--text-muted)' }}>Target</span>
+                        <span className="font-medium truncate max-w-[200px]" style={{ color: 'var(--cyan)' }}>
+                          {fResellerTargetMode === 'specific' ? fResellerUrl : fResellerType}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-8">
+                      <button
+                        onClick={() => setWizardStep(2)}
+                        className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all"
+                        style={{ border: '1px solid var(--dx-border)', color: 'var(--text-dim)' }}
+                      >
+                        ← Back
+                      </button>
+                      <button
+                        onClick={() => runFlow()}
+                        disabled={running}
+                        className="dx-btn-primary px-8 py-3.5 rounded-xl text-sm font-bold hover:shadow-glow-lg transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center gap-2"
+                      >
+                        {running && <span className="w-4 h-4 border-2 border-drix-bg/30 border-t-drix-bg rounded-full animate-spin" />}
+                        {running ? 'Building Intelligence...' : 'Build Recruitment Intelligence →'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  /* ── Standard/P2P Step 3: Title + Company URL ── */
+                  <>
+                    <div className="text-center mb-6">
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-drix-purple to-drix-pink mb-4 shadow-lg">
+                        <span className="text-drix-bg font-black text-lg">3</span>
+                      </div>
+                      <h3 className="text-lg font-black mb-1" style={{ color: 'var(--text)' }}>{isP2P ? 'Who are you targeting together?' : 'Who are you selling to?'}</h3>
+                      <p className="text-xs" style={{ color: 'var(--text-dim)' }}>{isP2P ? 'Optional — helps the tool find joint opportunities.' : 'Optional — the more specific, the sharper the intelligence.'}</p>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-extrabold tracking-widest uppercase text-drix-muted">Buyer Title / Persona</label>
+                        <input
+                          type="text"
+                          value={fTitle}
+                          onChange={(e) => { setFTitle(e.target.value); updateDepth('title', e.target.value) }}
+                          placeholder="e.g. VP of IT, CISO, CFO"
+                          autoFocus
+                          className="bg-drix-surface2 border border-drix-border rounded-xl px-4 py-3 text-sm text-drix-text outline-none focus:border-drix-purple focus:shadow-[0_0_20px_rgba(181,131,255,0.15)] transition-all h-[46px]"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-extrabold tracking-widest uppercase text-drix-muted">Company URL</label>
+                        <input
+                          type="text"
+                          value={fCustomer}
+                          onChange={(e) => { setFCustomer(e.target.value); updateDepth('company', e.target.value) }}
+                          placeholder="customer.com"
+                          className="bg-drix-surface2 border border-drix-border rounded-xl px-4 py-3 text-sm text-drix-text outline-none focus:border-drix-purple focus:shadow-[0_0_20px_rgba(181,131,255,0.15)] transition-all h-[46px]"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-8">
+                      <button
+                        onClick={() => setWizardStep(2)}
+                        className="px-5 py-2.5 rounded-xl text-xs font-bold border border-drix-border text-drix-dim hover:text-drix-text hover:border-drix-accent/50 transition-all"
+                      >
+                        ← Back
+                      </button>
+                      <button
+                        onClick={() => setWizardStep(4)}
+                        className="dx-btn-purple-pink px-7 py-3 rounded-xl text-sm font-bold hover:shadow-glow transition-all hover:-translate-y-0.5"
+                      >
+                        {(fTitle || fCustomer) ? 'Next →' : 'Skip →'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </motion.div>
             )}
 
-            {/* Step 4: Individual LinkedIn + Email */}
-            {wizardStep === 4 && (
+            {/* Step 4: Individual LinkedIn + Email (not used in distributor mode) */}
+            {wizardStep === 4 && !isDistributor && (
               <motion.div
                 key="step4"
                 initial={{ opacity: 0, y: 40 }}
@@ -2236,8 +2602,8 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
               </motion.div>
             )}
 
-            {/* Step 5: Review & Submit */}
-            {wizardStep === 5 && (
+            {/* Step 5: Review & Submit (not used in distributor mode) */}
+            {wizardStep === 5 && !isDistributor && (
               <motion.div
                 key="step5"
                 initial={{ opacity: 0, y: 40 }}
@@ -2318,10 +2684,14 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
           <div className="flex items-center gap-2 flex-wrap p-3 rounded-lg text-[10px] mt-6" style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)' }}>
             <span className="font-extrabold tracking-widest uppercase mr-1" style={{ color: 'var(--text-muted)' }}>Depth:</span>
             {L.depthLabels.map((label, i) => {
-              const depthKeys = ['reseller', 'solution', 'industry', 'title', 'company', 'individual']
+              const depthKeys = isDistributor
+                ? ['distributor', 'vendor', 'reseller', 'customer', 'industry', 'size']
+                : ['reseller', 'solution', 'industry', 'title', 'company', 'individual']
               const varName = depthKeys[i]
-              const isAlwaysOn = i === 0 || i === 1
-              const isActive = isAlwaysOn || depth[varName as keyof typeof depth]
+              const isAlwaysOn = isDistributor ? (i === 0 || i === 1 || i === 2) : (i === 0 || i === 1)
+              const isActive = isDistributor
+                ? (i === 0 ? !!fDistributorName : i === 1 ? !!fSender : i === 2 ? !!(fResellerUrl || fResellerType) : i === 3 ? !!(fSpecificCustomer || fSpecificPartner) : i === 4 ? !!selectedIndustry : i === 5 ? !!fCustomerSize : false)
+                : (isAlwaysOn || depth[varName as keyof typeof depth])
               return (
                 <span key={label} className="flex items-center gap-2">
                   <span
