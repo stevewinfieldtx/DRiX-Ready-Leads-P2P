@@ -20,19 +20,23 @@ export default function Navbar() {
   const isActive = (path: string) => location.pathname === path
 
   const isP2P = location.pathname === '/p2p'
+  const isDistributor = location.pathname === '/distributor'
+  const isSpecialMode = isP2P || isDistributor
 
   const navLinks = isP2P
     ? [{ path: '/p2p', label: 'P2P Intelligence' }]
-    : [
-        { path: '/', label: 'Home' },
-        { path: '/how-it-works', label: 'How It Works' },
-        { path: '/app', label: 'Launch App' },
-        { path: '/p2p', label: 'P2P Mode' },
-      ]
+    : isDistributor
+      ? [{ path: '/distributor', label: 'Vendor Recruitment' }]
+      : [
+          { path: '/', label: 'Home' },
+          { path: '/how-it-works', label: 'How It Works' },
+          { path: '/app', label: 'Launch App' },
+          { path: '/p2p', label: 'P2P Mode' },
+        ]
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isP2P ? 'p2p-mode' : ''} ${
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isP2P ? 'p2p-mode' : isDistributor ? 'distributor-mode' : ''} ${
         scrolled
           ? 'glass shadow-lg shadow-black/20'
           : 'bg-transparent'
@@ -41,7 +45,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center h-16 relative">
           {/* Brand — fixed width so center nav is truly centered */}
-          <Link to={isP2P ? '/p2p' : '/'} className="flex items-center gap-3 group flex-shrink-0">
+          <Link to={isP2P ? '/p2p' : isDistributor ? '/distributor' : '/'} className="flex items-center gap-3 group flex-shrink-0">
             <img src="/DRiX-Logo.jpg" alt="DRiX" className="h-11 w-auto" />
           </Link>
 
@@ -64,7 +68,7 @@ export default function Navbar() {
 
           {/* Launch Buttons — pushed to the right */}
           <div className="hidden md:flex items-center gap-2 ml-auto">
-            {!isP2P && (
+            {!isSpecialMode && (
               <>
                 <Link
                   to="/p2p"
@@ -113,7 +117,7 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            {!isP2P && (
+            {!isSpecialMode && (
               <>
                 <Link
                   to="/p2p"

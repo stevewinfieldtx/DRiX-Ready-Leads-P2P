@@ -45,13 +45,19 @@ const short = (s: any) => {
   return String(s).split(/[\/,.]/)[0].split(' ').slice(0, 2).join(' ')
 }
 
+type AppMode = 'standard' | 'p2p' | 'distributor'
+
 interface DrixAppProps {
-  p2pMode?: boolean
+  mode?: AppMode
 }
 
-export default function DrixApp({ p2pMode = false }: DrixAppProps) {
-  // ─── P2P LABEL CONFIG ──────────────────────────────────────────────────
-  const L = p2pMode
+export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
+  const isP2P = mode === 'p2p'
+  const isDistributor = mode === 'distributor'
+  const isSpecialMode = mode !== 'standard'  // true for both P2P and distributor
+
+  // ─── LABEL CONFIG ──────────────────────────────────────────────────
+  const L = isP2P
     ? {
         badge: 'Partner Collaboration',
         heading: 'Partner',
@@ -76,30 +82,55 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
         reviewSolutionLabel: 'Partner B',
         footer: 'DRiX P2P · Partner Collaboration Intelligence · by WinTech Partners',
       }
-    : {
-        badge: 'Intelligence Builder',
-        heading: 'Build Your',
-        headingAccent: 'Intelligence',
-        subtitle: 'Fill in what you know. Skip what you don\'t. DRiX adapts to whatever depth you provide.',
-        step1Icon: '1',
-        step1Title: 'Who are you and what do you sell?',
-        step1Desc: 'These two fields are required. Everything else is optional.',
-        senderLabel: 'Reseller / your company URL',
-        senderPlaceholder: 'yourcompany.com',
-        solutionLabel: 'Solution URL',
-        solutionPlaceholder: 'yourcompany.com/products/flagship',
-        atomSenderLabel: 'Sender (you)',
-        atomSenderRole: 'sender',
-        atomSolutionLabel: 'Solution / product',
-        atomSolutionRole: 'solution',
-        atomCustomerLabel: 'Customer',
-        stratSenderContrib: 'You bring',
-        stratSolutionContrib: 'Solution delivers',
-        depthLabels: ['RESELLER', 'SOLUTION', 'INDUSTRY', 'TITLE', 'COMPANY', 'INDIVIDUAL'] as const,
-        reviewSenderLabel: 'Reseller',
-        reviewSolutionLabel: 'Solution',
-        footer: 'DRiX · Data Reimagined Experience · by WinTech Partners',
-      }
+    : isDistributor
+      ? {
+          badge: 'Vendor Recruitment',
+          heading: 'Vendor Recruitment',
+          headingAccent: 'Intelligence',
+          subtitle: 'Show resellers why they should add this vendor to their stack — with data, not guesswork.',
+          step1Icon: '1',
+          step1Title: 'Enter the vendor and target reseller',
+          step1Desc: 'Provide URLs where we can find information about each.',
+          senderLabel: 'New Vendor',
+          senderPlaceholder: 'vendor.com',
+          solutionLabel: 'Target Reseller',
+          solutionPlaceholder: 'reseller.com',
+          atomSenderLabel: 'Vendor',
+          atomSenderRole: 'vendor',
+          atomSolutionLabel: 'Reseller',
+          atomSolutionRole: 'reseller',
+          atomCustomerLabel: 'Customer / Vertical',
+          stratSenderContrib: 'Vendor provides',
+          stratSolutionContrib: 'Reseller gains',
+          depthLabels: ['VENDOR', 'RESELLER', 'INDUSTRY', 'TITLE', 'COMPANY', 'INDIVIDUAL'] as const,
+          reviewSenderLabel: 'Vendor',
+          reviewSolutionLabel: 'Reseller',
+          footer: 'DRiX Distributor · Vendor Recruitment Intelligence · by WinTech Partners',
+        }
+      : {
+          badge: 'Intelligence Builder',
+          heading: 'Build Your',
+          headingAccent: 'Intelligence',
+          subtitle: 'Fill in what you know. Skip what you don\'t. DRiX adapts to whatever depth you provide.',
+          step1Icon: '1',
+          step1Title: 'Who are you and what do you sell?',
+          step1Desc: 'These two fields are required. Everything else is optional.',
+          senderLabel: 'Reseller / your company URL',
+          senderPlaceholder: 'yourcompany.com',
+          solutionLabel: 'Solution URL',
+          solutionPlaceholder: 'yourcompany.com/products/flagship',
+          atomSenderLabel: 'Sender (you)',
+          atomSenderRole: 'sender',
+          atomSolutionLabel: 'Solution / product',
+          atomSolutionRole: 'solution',
+          atomCustomerLabel: 'Customer',
+          stratSenderContrib: 'You bring',
+          stratSolutionContrib: 'Solution delivers',
+          depthLabels: ['RESELLER', 'SOLUTION', 'INDUSTRY', 'TITLE', 'COMPANY', 'INDIVIDUAL'] as const,
+          reviewSenderLabel: 'Reseller',
+          reviewSolutionLabel: 'Solution',
+          footer: 'DRiX · Data Reimagined Experience · by WinTech Partners',
+        }
   // ─── STATE ──────────────────────────────────────────────────────────────
   const [appState, setAppState] = useState<AppState>({
     naics: null,
@@ -111,7 +142,7 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
   })
   const [statusText, setStatusText] = useState('Checking…')
   const [statusWarn, setStatusWarn] = useState(false)
-  const [mode, setMode] = useState<'production' | 'demo'>(p2pMode ? 'production' : 'production')
+  const [demoMode, setDemoMode] = useState<'production' | 'demo'>('production')
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
   const [phases, setPhases] = useState<{ id: string; text: string; state: 'pending' | 'running' | 'done' | 'error' }[]>([
@@ -263,8 +294,8 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
     const solution = fSolution.trim()
 
     if (!email || !sender || !solution) {
-      setError(p2pMode
-        ? 'Fill in email, Partner A URL, and Partner B URL.'
+      setError(isP2P ? 'Fill in email, Partner A URL, and Partner B URL.'
+        : isDistributor ? 'Fill in email, Vendor URL, and Reseller URL.'
         : 'Fill in email, your company URL, and the solution URL.')
       return
     }
@@ -277,12 +308,13 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
       email,
       sender_company_url: sender,
       solution_url: solution,
-      mode: mode === 'demo' ? 'demo' : 'production',
+      mode: demoMode === 'demo' ? 'demo' : 'production',
+      app_mode: mode,
       ...(forceFresh ? { force_fresh: true } : {}),
     }
 
-    // P2P multi-URL support: attach extra URLs for each partner
-    if (p2pMode) {
+    // Multi-URL support: attach extra URLs for each partner/vendor
+    if (isSpecialMode) {
       const sExtra = fSenderExtraUrls.map(u => u.trim()).filter(Boolean)
       const solExtra = fSolutionExtraUrls.map(u => u.trim()).filter(Boolean)
       if (sExtra.length) body.sender_extra_urls = sExtra
@@ -358,7 +390,7 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
     } finally {
       setRunning(false)
     }
-  }, [mode, appState.naics, fEmail, fSender, fSolution, fCustomer, selectedIndustry, fSubindustry, fTitle, fIndividual, fIndividualEmail])
+  }, [demoMode, appState.naics, fEmail, fSender, fSolution, fCustomer, selectedIndustry, fSubindustry, fTitle, fIndividual, fIndividualEmail])
 
   // Expose force-fresh retry on window for the retry button
   useEffect(() => {
@@ -806,16 +838,29 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
         <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);font-weight:800;margin:0;display:flex;align-items:center;gap:8px;">
           <span style="width:14px;height:2px;background:var(--dx-accent);border-radius:2px;"></span>
-          Sales Strategies — ${strats.length}
+          ${isDistributor ? 'Recruitment Strategies' : 'Sales Strategies'} — ${strats.length}
         </div>
         <div style="font-size:12px;color:var(--text-dim);">
-          ${p2pMode
+          ${isP2P
             ? `<strong>${esc(data.sender_label || 'Partner A')}</strong> + <strong>${esc(data.solution_label || 'Partner B')}</strong> targeting <strong>${esc(data.customer_label || 'the customer')}</strong>`
-            : `<strong>${esc(data.sender_label || 'You')}</strong> selling <strong>${esc(data.solution_label || 'your solution')}</strong> to <strong>${esc(data.customer_label || 'the customer')}</strong>`
+            : isDistributor
+              ? `Why <strong>${esc(data.solution_label || 'the reseller')}</strong> should sell <strong>${esc(data.sender_label || 'this vendor')}</strong> to <strong>${esc(data.customer_label || 'their customers')}</strong>`
+              : `<strong>${esc(data.sender_label || 'You')}</strong> selling <strong>${esc(data.solution_label || 'your solution')}</strong> to <strong>${esc(data.customer_label || 'the customer')}</strong>`
           }
         </div>
       </div>
       ${retryBlock}
+      ${isDistributor && (data.competing_tech_found?.length || data.complementary_areas?.length) ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+        ${data.competing_tech_found?.length ? `<div style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:10px;padding:12px 14px;">
+          <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;color:#dc2626;margin-bottom:8px;">Competing Tech Detected</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">${data.competing_tech_found.map((t: string) => `<span style="font-size:11px;font-weight:700;background:rgba(220,38,38,0.15);color:#f87171;padding:3px 10px;border-radius:8px;">${esc(t)}</span>`).join('')}</div>
+        </div>` : '<div></div>'}
+        ${data.complementary_areas?.length ? `<div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);border-radius:10px;padding:12px 14px;">
+          <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;color:#4ade80;margin-bottom:8px;">Complementary Fit</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">${data.complementary_areas.map((t: string) => `<span style="font-size:11px;font-weight:700;background:rgba(74,222,128,0.15);color:#4ade80;padding:3px 10px;border-radius:8px;">${esc(t)}</span>`).join('')}</div>
+        </div>` : '<div></div>'}
+      </div>` : ''}
       <div style="display:flex;flex-direction:column;gap:12px;">
         ${strats.map((s: any) => renderStratCard(s, s.id === topId)).join('')}
         <div style="background:var(--bg);border:2px dashed var(--dx-border);border-radius:12px;padding:14px 16px;text-align:center;">
@@ -871,7 +916,7 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
           <div style="background:var(--bg);border:1px solid var(--dx-border);border-radius:6px;padding:8px 10px;"><div style="font-size:8px;letter-spacing:1.3px;text-transform:uppercase;color:var(--text-muted);font-weight:800;margin-bottom:3px;">${esc(L.stratSenderContrib)}</div><div style="font-size:11px;color:var(--text);line-height:1.4;">${esc(s.sender_contribution)}</div></div>
           <div style="background:var(--bg);border:1px solid var(--dx-border);border-radius:6px;padding:8px 10px;"><div style="font-size:8px;letter-spacing:1.3px;text-transform:uppercase;color:var(--text-muted);font-weight:800;margin-bottom:3px;">${esc(L.stratSolutionContrib)}</div><div style="font-size:11px;color:var(--text);line-height:1.4;">${esc(s.solution_contribution)}</div></div>
           <div style="background:var(--bg);border:1px solid var(--dx-border);border-radius:6px;padding:8px 10px;"><div style="font-size:8px;letter-spacing:1.3px;text-transform:uppercase;color:var(--text-muted);font-weight:800;margin-bottom:3px;">First step</div><div style="font-size:11px;color:var(--text);line-height:1.4;">${esc(s.first_step)}</div></div>
-          ${p2pMode ? `<div style="grid-column:1/-1;background:var(--bg);border:1px solid var(--dx-border);border-radius:6px;padding:10px 12px;">
+          ${isP2P ? `<div style="grid-column:1/-1;background:var(--bg);border:1px solid var(--dx-border);border-radius:6px;padding:10px 12px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
               <div style="font-size:8px;letter-spacing:1.3px;text-transform:uppercase;color:var(--text-muted);font-weight:800;">Suggested Revenue Split</div>
               <div style="font-size:11px;font-weight:800;color:var(--text);">${s.sender_contribution && s.solution_contribution ? (s.sender_contribution.length >= s.solution_contribution.length ? '55 / 45' : '45 / 55') : '50 / 50'}</div>
@@ -1691,7 +1736,7 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
   `
 
   return (
-    <div className={`pt-20 pb-16 ${p2pMode ? 'p2p-mode' : ''}`}>
+    <div className={`pt-20 pb-16 ${isP2P ? 'p2p-mode' : isDistributor ? 'distributor-mode' : ''}`}>
       <style>{appStyles}</style>
 
       {/* Header */}
@@ -1701,9 +1746,15 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-10"
         >
-          <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full mb-4 ${p2pMode ? 'bg-[#e6a317]/10 border border-[#e6a317]/20' : 'bg-drix-accent/10 border border-drix-accent/20'}`}>
-            <Zap size={14} className={p2pMode ? 'text-[#e6a317]' : 'text-drix-accent'} />
-            <span className={`text-xs font-semibold tracking-widest uppercase ${p2pMode ? 'text-[#e6a317]' : 'text-drix-accent'}`}>
+          <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full mb-4 ${
+            isP2P ? 'bg-[#e6a317]/10 border border-[#e6a317]/20'
+            : isDistributor ? 'bg-[#dc2626]/10 border border-[#dc2626]/20'
+            : 'bg-drix-accent/10 border border-drix-accent/20'
+          }`}>
+            <Zap size={14} className={isP2P ? 'text-[#e6a317]' : isDistributor ? 'text-[#dc2626]' : 'text-drix-accent'} />
+            <span className={`text-xs font-semibold tracking-widest uppercase ${
+              isP2P ? 'text-[#e6a317]' : isDistributor ? 'text-[#dc2626]' : 'text-drix-accent'
+            }`}>
               {L.badge}
             </span>
           </div>
@@ -1731,7 +1782,7 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
               <span>{statusText}</span>
             </div>
           </div>
-          {!p2pMode && (
+          {!isSpecialMode && (
             <Link
               to="/"
               className="text-xs text-drix-muted hover:text-drix-text transition-colors"
@@ -1748,26 +1799,26 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
           transition={{ delay: 0.3 }}
           className="glass rounded-2xl p-6 sm:p-8 mb-8"
         >
-          {/* Mode Switch — hidden in P2P mode (always production / unlimited) */}
-          {!p2pMode && (
+          {/* Mode Switch — hidden in special modes (always production / unlimited) */}
+          {!isSpecialMode && (
           <div className="flex items-center gap-3 mb-6 p-3 bg-drix-surface2 rounded-xl border border-drix-border">
-            <span className={`text-[11px] font-extrabold tracking-widest uppercase ${mode === 'production' ? 'text-drix-green' : 'text-drix-muted'}`}>
+            <span className={`text-[11px] font-extrabold tracking-widest uppercase ${demoMode === 'production' ? 'text-drix-green' : 'text-drix-muted'}`}>
               PRODUCTION
             </span>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"
                 className="sr-only peer"
-                checked={mode === 'demo'}
-                onChange={(e) => setMode(e.target.checked ? 'demo' : 'production')}
+                checked={demoMode === 'demo'}
+                onChange={(e) => setDemoMode(e.target.checked ? 'demo' : 'production')}
               />
               <div className="w-10 h-[22px] bg-drix-green peer-checked:bg-drix-yellow rounded-full peer transition-colors duration-200 after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:translate-x-[18px]" />
             </label>
-            <span className={`text-[11px] font-extrabold tracking-widest uppercase ${mode === 'demo' ? 'text-drix-yellow' : 'text-drix-muted'}`}>
+            <span className={`text-[11px] font-extrabold tracking-widest uppercase ${demoMode === 'demo' ? 'text-drix-yellow' : 'text-drix-muted'}`}>
               DEMO
             </span>
             <span className="text-[11px] text-drix-dim ml-2">
-              {mode === 'demo' ? 'Limited to 20 atoms per category' : 'Full atom generation (50-150 per source)'}
+              {demoMode === 'demo' ? 'Limited to 20 atoms per category' : 'Full atom generation (50-150 per source)'}
             </span>
           </div>
           )}
@@ -1830,28 +1881,32 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -40 }}
                 transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
-                className={p2pMode ? 'max-w-2xl mx-auto' : 'max-w-lg mx-auto'}
+                className={isSpecialMode ? 'max-w-2xl mx-auto' : 'max-w-lg mx-auto'}
               >
                 <div className="text-center mb-6">
-                  <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4 shadow-lg ${p2pMode ? 'bg-gradient-to-br from-[#e6a317] to-[#17c3b2]' : 'bg-gradient-to-br from-drix-green to-drix-accent'}`}>
+                  <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4 shadow-lg ${
+                    isP2P ? 'bg-gradient-to-br from-[#e6a317] to-[#17c3b2]'
+                    : isDistributor ? 'bg-gradient-to-br from-[#dc2626] to-[#94a3b8]'
+                    : 'bg-gradient-to-br from-drix-green to-drix-accent'
+                  }`}>
                     <span className="font-black text-lg" style={{ color: 'var(--bg)' }}>1</span>
                   </div>
                   <h3 className="text-lg font-black mb-1" style={{ color: 'var(--text)' }}>{L.step1Title}</h3>
                   <p className="text-xs" style={{ color: 'var(--text-dim)' }}>{L.step1Desc}</p>
-                  {p2pMode && (
+                  {isSpecialMode && (
                     <p className="text-[11px] mt-2 max-w-lg mx-auto leading-relaxed" style={{ color: 'var(--text-muted)' }}>
                       Provide any URL where we can find information — company website, product pages, YouTube videos, partner portals, press releases. Add as many as you need. YouTube URLs work but will take longer to process.
                     </p>
                   )}
                 </div>
 
-                {p2pMode ? (
-                  /* ── P2P: Side-by-side partner panels with multi-URL ── */
+                {isSpecialMode ? (
+                  /* ── Side-by-side panels with multi-URL ── */
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Partner A */}
+                    {/* Sender panel */}
                     <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--dx-border)' }}>
                       <div className="flex items-center gap-2 mb-3">
-                        <span className="text-[10px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded-md" style={{ background: 'rgba(230,163,23,0.15)', color: 'var(--dx-accent)' }}>Partner A</span>
+                        <span className="text-[10px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded-md" style={{ background: isDistributor ? 'rgba(220,38,38,0.15)' : 'rgba(230,163,23,0.15)', color: 'var(--dx-accent)' }}>{L.atomSenderLabel}</span>
                       </div>
                       <div className="flex flex-col gap-1.5 mb-3">
                         <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Primary URL <span style={{ color: 'var(--red)' }}>*</span></label>
@@ -1859,7 +1914,7 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
                           type="text"
                           value={fSender}
                           onChange={(e) => setFSender(e.target.value)}
-                          placeholder="partnerA.com"
+                          placeholder={L.senderPlaceholder}
                           autoFocus
                           className="rounded-lg px-3 py-2.5 text-sm outline-none transition-all"
                           style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
@@ -1893,10 +1948,10 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
                       >+ Add another URL</button>
                     </div>
 
-                    {/* Partner B */}
+                    {/* Solution panel */}
                     <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--dx-border)' }}>
                       <div className="flex items-center gap-2 mb-3">
-                        <span className="text-[10px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded-md" style={{ background: 'rgba(23,195,178,0.15)', color: 'var(--cyan)' }}>Partner B</span>
+                        <span className="text-[10px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded-md" style={{ background: isDistributor ? 'rgba(148,163,184,0.15)' : 'rgba(23,195,178,0.15)', color: isDistributor ? 'var(--cyan)' : 'var(--cyan)' }}>{L.atomSolutionLabel}</span>
                       </div>
                       <div className="flex flex-col gap-1.5 mb-3">
                         <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Primary URL <span style={{ color: 'var(--red)' }}>*</span></label>
@@ -1904,7 +1959,7 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
                           type="text"
                           value={fSolution}
                           onChange={(e) => setFSolution(e.target.value)}
-                          placeholder="partnerB.com"
+                          placeholder={L.solutionPlaceholder}
                           className="rounded-lg px-3 py-2.5 text-sm outline-none transition-all"
                           style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
                         />
@@ -2081,8 +2136,8 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
                   <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-drix-purple to-drix-pink mb-4 shadow-lg">
                     <span className="text-drix-bg font-black text-lg">3</span>
                   </div>
-                  <h3 className="text-lg font-black mb-1" style={{ color: 'var(--text)' }}>{p2pMode ? 'Who are you targeting together?' : 'Who are you selling to?'}</h3>
-                  <p className="text-xs" style={{ color: 'var(--text-dim)' }}>{p2pMode ? 'Optional — helps the tool find joint opportunities.' : 'Optional — the more specific, the sharper the intelligence.'}</p>
+                  <h3 className="text-lg font-black mb-1" style={{ color: 'var(--text)' }}>{isP2P ? 'Who are you targeting together?' : isDistributor ? 'Which customer vertical are you targeting?' : 'Who are you selling to?'}</h3>
+                  <p className="text-xs" style={{ color: 'var(--text-dim)' }}>{isP2P ? 'Optional — helps the tool find joint opportunities.' : isDistributor ? 'Optional — helps show the reseller where the vendor fits.' : 'Optional — the more specific, the sharper the intelligence.'}</p>
                 </div>
                 <div className="space-y-4">
                   <div className="flex flex-col gap-1.5">
@@ -2272,7 +2327,7 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
                   <span
                     className="px-2 py-0.5 rounded-md font-bold tracking-wide transition-all"
                     style={isActive
-                      ? { background: p2pMode ? 'rgba(230,163,23,0.15)' : 'rgba(90,169,255,0.15)', color: 'var(--dx-accent)' }
+                      ? { background: isP2P ? 'rgba(230,163,23,0.15)' : isDistributor ? 'rgba(220,38,38,0.15)' : 'rgba(90,169,255,0.15)', color: 'var(--dx-accent)' }
                       : { background: 'var(--surface-3)', color: 'var(--text-muted)' }
                     }
                   >

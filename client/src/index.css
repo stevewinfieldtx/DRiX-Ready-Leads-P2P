@@ -321,3 +321,68 @@
   background: #17c3b2;
   transition: width 0.3s ease;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DISTRIBUTOR MODE — Red + Slate overrides
+   ══════════════════════════════════════════════════════════════════════════ */
+.distributor-mode {
+  --bg: #0d0f12;
+  --surface: #141820;
+  --surface-2: #1a2030;
+  --surface-3: #222838;
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --text-muted: #64748b;
+  --dx-border: #2d3548;
+  --dx-accent: #dc2626;
+  --accent-glow: rgba(220, 38, 38, 0.4);
+  --green: #4ade80;
+  --yellow: #fbbf24;
+  --red: #f87171;
+  --purple: #c084fc;
+  --orange: #fb923c;
+  --pink: #f472b6;
+  --cyan: #94a3b8;
+
+  /* shadcn/ui HSL overrides */
+  --background: 216 20% 5%;
+  --foreground: 214 32% 91%;
+  --card: 218 22% 9%;
+  --card-foreground: 214 32% 91%;
+  --popover: 218 22% 9%;
+  --popover-foreground: 214 32% 91%;
+  --primary: 0 74% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 217 19% 17%;
+  --secondary-foreground: 214 32% 91%;
+  --muted: 217 19% 17%;
+  --muted-foreground: 215 20% 55%;
+  --accent: 0 74% 50%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 74% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 218 22% 18%;
+  --input: 218 22% 18%;
+  --ring: 0 74% 50%;
+}
+
+.distributor-mode .dx-btn-primary {
+  background: linear-gradient(to right, #dc2626, #94a3b8) !important;
+  color: #0d0f12 !important;
+}
+
+.distributor-mode .dx-btn-secondary {
+  background: var(--surface-2) !important;
+  border-color: var(--dx-border) !important;
+  color: var(--text) !important;
+}
+
+.distributor-mode .dx-btn-secondary:hover {
+  background: var(--surface-3) !important;
+  border-color: var(--dx-accent) !important;
+}
+
+.distributor-mode .glass {
+  background: rgba(13, 15, 18, 0.75) !important;
+  border-color: rgba(45, 53, 72, 0.5) !important;
+}

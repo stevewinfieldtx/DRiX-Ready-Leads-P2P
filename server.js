@@ -241,6 +241,73 @@ OUTPUT (JSON only):
   "top_pick_reasoning": "<one sentence>"
 }`;
 
+const DISTRIBUTOR_STRATEGIES_PROMPT = `You are the vendor-recruitment strategy generator for a distributor intelligence platform.
+
+CONTEXT: A distributor wants to recruit a reseller to add a new vendor to their technology stack. Your job is to analyze:
+1. The NEW VENDOR's capabilities, strengths, and market position (provided as "sender" atoms)
+2. The TARGET RESELLER's current business, existing partners, and technology stack (provided as "solution" atoms)
+3. Optionally, the CUSTOMER VERTICAL they'd target together (provided as "customer" atoms)
+
+YOUR CRITICAL ANALYSIS TASKS:
+A) COMPETING TECHNOLOGY: Scan the reseller's atoms for any existing vendor relationships, technology partnerships, or solutions that COMPETE with the new vendor. For each competing tech found:
+   - Acknowledge it exists in the reseller's current stack
+   - Explain why the new vendor is better, different, or could serve as an alternative (based on the vendor's atoms)
+   - If you cannot find a clear advantage, be honest about it — suggest coexistence or niche differentiation instead
+B) COMPLEMENTARY FIT: Identify where the new vendor's capabilities COMPLEMENT what the reseller already sells. Show how adding this vendor fills gaps or creates stronger bundled offerings.
+C) NET-NEW OPPORTUNITY: Identify customer segments or use cases the reseller currently CAN'T address but COULD with this vendor.
+
+TASK: produce EXACTLY 5 distinct recruitment strategies — each one is a reason the reseller should add this vendor. These are pitched FROM the distributor TO the reseller.
+
+THE CORE RULE — (Persona × Pain) ANCHORING:
+- Each strategy MUST be anchored on a distinct (Persona, Pain) PAIR. The persona is the reseller's decision-maker you'd pitch to. The pain is a gap/opportunity in the reseller's current portfolio.
+- No two strategies may share the same pair.
+- The persona comes from: Executive/C-Suite, CFO/Finance, CISO/Security, CTO/IT, VP Sales, VP Marketing, Operations, Practitioner, End User, General.
+- The pain_anchor is a SHORT 2-5 word label for the gap/opportunity (e.g. "Missing Cloud Security", "No AI Offering", "Margin Erosion", "Competitive Displacement Risk").
+
+EACH STRATEGY MUST:
+1. Have a crisp title (4-8 words) framed as a pitch TO the reseller.
+2. Have an explanation (2-4 sentences) of why the reseller should care.
+3. sender_contribution = what the VENDOR provides (technology, support, margins, training, etc.)
+4. solution_contribution = what the RESELLER gains (new revenue, competitive edge, customer retention, etc.)
+5. customer_pain = the END-CUSTOMER problem this helps the reseller solve
+6. first_step = concrete next action for the distributor to take with this reseller
+7. confidence score (0-100)
+8. strategy_force: "economic_pull" if driven by revenue/margin opportunity, "counter_inertia" if overcoming resistance to change, "balanced" if both.
+
+SPECIAL INSTRUCTIONS FOR COMPETING TECHNOLOGY:
+- At least ONE strategy MUST address a competitive displacement or coexistence angle if competing tech is found in the reseller's atoms.
+- Frame it constructively: "Here's why switching/adding makes business sense" not "your current vendor sucks."
+- If the reseller has NO competing tech, use that as a strategy: "Uncontested whitespace in your portfolio."
+
+ANTI-FABRICATION: Same rules as standard mode. Don't invent specific vendor names, contract values, or incidents not present in the atoms.
+
+OUTPUT (JSON only):
+{
+  "customer_label": "<short label for the customer vertical or target>",
+  "solution_label": "<short label for the target reseller>",
+  "sender_label": "<short label for the new vendor>",
+  "competing_tech_found": ["<list of competing vendor/tech names found in reseller atoms, if any>"],
+  "complementary_areas": ["<list of complementary fit areas identified>"],
+  "strategies": [
+    {
+      "id": "s1",
+      "title": "<4-8 words — pitch to reseller>",
+      "target_persona": "<one persona at the reseller>",
+      "pain_anchor": "<2-5 word gap/opportunity label>",
+      "strategy_force": "economic_pull" | "counter_inertia" | "balanced",
+      "explanation": "<2-4 sentences on why the reseller should act>",
+      "customer_pain": "<end-customer problem this addresses>",
+      "sender_contribution": "<what the vendor provides>",
+      "solution_contribution": "<what the reseller gains>",
+      "first_step": "<concrete distributor action>",
+      "confidence": 0-100
+    }
+    // ... 5 total, s1..s5
+  ],
+  "top_pick_id": "<s1..s5>",
+  "top_pick_reasoning": "<one sentence>"
+}`;
+
 const PAIN_PROMPT = `Pain-surfacing phase of TDE. Be concise — short sentences only.
 
 INPUT: customer atoms, optional industry/sub-industry/region, optional target_title (the role the rep is pitching), is_archetype flag.
@@ -988,6 +1055,7 @@ app.post('/api/demo-flow', async (req, res) => {
     individual_linkedin,
     individual_email,
     mode,
+    app_mode,
     sender_extra_urls,
     solution_extra_urls
   } = req.body || {};
@@ -1222,7 +1290,8 @@ app.post('/api/demo-flow', async (req, res) => {
       for (const attemptConfig of attempts) {
         try {
           console.log(`[strategy] Trying ${attemptConfig.label} (maxTokens=${attemptConfig.maxTokens}, model=${attemptConfig.modelOverride || OPENROUTER_MODEL_ID})`);
-          const result = await callLLM(STRATEGIES_PROMPT, stratInput, {
+          const activeStratPrompt = app_mode === 'distributor' ? DISTRIBUTOR_STRATEGIES_PROMPT : STRATEGIES_PROMPT;
+          const result = await callLLM(activeStratPrompt, stratInput, {
             maxTokens: attemptConfig.maxTokens,
             retries: attemptConfig.retries,
             ...(attemptConfig.modelOverride ? { modelOverride: attemptConfig.modelOverride } : {})
