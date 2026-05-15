@@ -26,7 +26,7 @@ echo.
 
 echo [5/6] Adding and committing all files...
 git add -A
-git commit -m "feat: Add P2P Partner Collaboration mode - New /p2p route with warm amber/teal theme - Partner A + Partner B input flow - Revenue split suggestions on strategy cards - Distinct visual identity from standard leads mode"
+git commit -m "feat: P2P standalone mode - multi-URL ingest, full isolation from standard app"
 echo.
 
 echo [6/6] Pushing to GitHub (force push since fresh init)...

@@ -111,7 +111,7 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
   })
   const [statusText, setStatusText] = useState('Checking…')
   const [statusWarn, setStatusWarn] = useState(false)
-  const [mode, setMode] = useState<'production' | 'demo'>('production')
+  const [mode, setMode] = useState<'production' | 'demo'>(p2pMode ? 'production' : 'production')
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
   const [phases, setPhases] = useState<{ id: string; text: string; state: 'pending' | 'running' | 'done' | 'error' }[]>([
@@ -190,6 +190,10 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
   const [fIndividualEmail, setFIndividualEmail] = useState('')
   const [fSubindustry, setFSubindustry] = useState('')
 
+  // P2P multi-URL state — additional info source URLs for each partner
+  const [fSenderExtraUrls, setFSenderExtraUrls] = useState<string[]>([])
+  const [fSolutionExtraUrls, setFSolutionExtraUrls] = useState<string[]>([])
+
   // (All inputs are now controlled — no refs needed)
 
   // ─── BOOT ───────────────────────────────────────────────────────────────
@@ -259,7 +263,9 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
     const solution = fSolution.trim()
 
     if (!email || !sender || !solution) {
-      setError('Fill in email, your company URL, and the solution URL.')
+      setError(p2pMode
+        ? 'Fill in email, Partner A URL, and Partner B URL.'
+        : 'Fill in email, your company URL, and the solution URL.')
       return
     }
     if (!/^\S+@\S+\.\S+$/.test(email)) {
@@ -273,6 +279,14 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
       solution_url: solution,
       mode: mode === 'demo' ? 'demo' : 'production',
       ...(forceFresh ? { force_fresh: true } : {}),
+    }
+
+    // P2P multi-URL support: attach extra URLs for each partner
+    if (p2pMode) {
+      const sExtra = fSenderExtraUrls.map(u => u.trim()).filter(Boolean)
+      const solExtra = fSolutionExtraUrls.map(u => u.trim()).filter(Boolean)
+      if (sExtra.length) body.sender_extra_urls = sExtra
+      if (solExtra.length) body.solution_extra_urls = solExtra
     }
 
     const cust = fCustomer.trim()
@@ -1717,12 +1731,14 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
               <span>{statusText}</span>
             </div>
           </div>
-          <Link
-            to="/"
-            className="text-xs text-drix-muted hover:text-drix-text transition-colors"
-          >
-            ← Back to Home
-          </Link>
+          {!p2pMode && (
+            <Link
+              to="/"
+              className="text-xs text-drix-muted hover:text-drix-text transition-colors"
+            >
+              ← Back to Home
+            </Link>
+          )}
         </motion.div>
 
         {/* Wizard Panel */}
@@ -1732,7 +1748,8 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
           transition={{ delay: 0.3 }}
           className="glass rounded-2xl p-6 sm:p-8 mb-8"
         >
-          {/* Mode Switch */}
+          {/* Mode Switch — hidden in P2P mode (always production / unlimited) */}
+          {!p2pMode && (
           <div className="flex items-center gap-3 mb-6 p-3 bg-drix-surface2 rounded-xl border border-drix-border">
             <span className={`text-[11px] font-extrabold tracking-widest uppercase ${mode === 'production' ? 'text-drix-green' : 'text-drix-muted'}`}>
               PRODUCTION
@@ -1753,6 +1770,7 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
               {mode === 'demo' ? 'Limited to 20 atoms per category' : 'Full atom generation (50-150 per source)'}
             </span>
           </div>
+          )}
 
           {/* ─── WIZARD ─── */}
           <div className="relative overflow-hidden min-h-[280px]">
@@ -1812,7 +1830,7 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -40 }}
                 transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
-                className="max-w-lg mx-auto"
+                className={p2pMode ? 'max-w-2xl mx-auto' : 'max-w-lg mx-auto'}
               >
                 <div className="text-center mb-6">
                   <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4 shadow-lg ${p2pMode ? 'bg-gradient-to-br from-[#e6a317] to-[#17c3b2]' : 'bg-gradient-to-br from-drix-green to-drix-accent'}`}>
@@ -1820,36 +1838,139 @@ export default function DrixApp({ p2pMode = false }: DrixAppProps) {
                   </div>
                   <h3 className="text-lg font-black mb-1" style={{ color: 'var(--text)' }}>{L.step1Title}</h3>
                   <p className="text-xs" style={{ color: 'var(--text-dim)' }}>{L.step1Desc}</p>
+                  {p2pMode && (
+                    <p className="text-[11px] mt-2 max-w-lg mx-auto leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                      Provide any URL where we can find information — company website, product pages, YouTube videos, partner portals, press releases. Add as many as you need. YouTube URLs work but will take longer to process.
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>{L.senderLabel} <span style={{ color: 'var(--red)' }}>*</span></label>
-                    <input
-                      type="text"
-                      value={fSender}
-                      onChange={(e) => setFSender(e.target.value)}
-                      placeholder={L.senderPlaceholder}
-                      autoFocus
-                      className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
-                      style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
-                    />
+
+                {p2pMode ? (
+                  /* ── P2P: Side-by-side partner panels with multi-URL ── */
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Partner A */}
+                    <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--dx-border)' }}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-[10px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded-md" style={{ background: 'rgba(230,163,23,0.15)', color: 'var(--dx-accent)' }}>Partner A</span>
+                      </div>
+                      <div className="flex flex-col gap-1.5 mb-3">
+                        <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Primary URL <span style={{ color: 'var(--red)' }}>*</span></label>
+                        <input
+                          type="text"
+                          value={fSender}
+                          onChange={(e) => setFSender(e.target.value)}
+                          placeholder="partnerA.com"
+                          autoFocus
+                          className="rounded-lg px-3 py-2.5 text-sm outline-none transition-all"
+                          style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                        />
+                      </div>
+                      {fSenderExtraUrls.map((url, i) => (
+                        <div key={i} className="flex gap-2 mb-2">
+                          <input
+                            type="text"
+                            value={url}
+                            onChange={(e) => {
+                              const updated = [...fSenderExtraUrls]
+                              updated[i] = e.target.value
+                              setFSenderExtraUrls(updated)
+                            }}
+                            placeholder="Additional URL..."
+                            className="flex-1 rounded-lg px-3 py-2 text-sm outline-none transition-all"
+                            style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                          />
+                          <button
+                            onClick={() => setFSenderExtraUrls(fSenderExtraUrls.filter((_, j) => j !== i))}
+                            className="px-2 rounded-lg text-xs font-bold"
+                            style={{ color: 'var(--red)', border: '1px solid var(--dx-border)' }}
+                          >✕</button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => setFSenderExtraUrls([...fSenderExtraUrls, ''])}
+                        className="text-[11px] font-bold mt-1 px-3 py-1.5 rounded-lg transition-all"
+                        style={{ color: 'var(--dx-accent)', border: '1px dashed var(--dx-border)' }}
+                      >+ Add another URL</button>
+                    </div>
+
+                    {/* Partner B */}
+                    <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--dx-border)' }}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-[10px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded-md" style={{ background: 'rgba(23,195,178,0.15)', color: 'var(--cyan)' }}>Partner B</span>
+                      </div>
+                      <div className="flex flex-col gap-1.5 mb-3">
+                        <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Primary URL <span style={{ color: 'var(--red)' }}>*</span></label>
+                        <input
+                          type="text"
+                          value={fSolution}
+                          onChange={(e) => setFSolution(e.target.value)}
+                          placeholder="partnerB.com"
+                          className="rounded-lg px-3 py-2.5 text-sm outline-none transition-all"
+                          style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                        />
+                      </div>
+                      {fSolutionExtraUrls.map((url, i) => (
+                        <div key={i} className="flex gap-2 mb-2">
+                          <input
+                            type="text"
+                            value={url}
+                            onChange={(e) => {
+                              const updated = [...fSolutionExtraUrls]
+                              updated[i] = e.target.value
+                              setFSolutionExtraUrls(updated)
+                            }}
+                            placeholder="Additional URL..."
+                            className="flex-1 rounded-lg px-3 py-2 text-sm outline-none transition-all"
+                            style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                          />
+                          <button
+                            onClick={() => setFSolutionExtraUrls(fSolutionExtraUrls.filter((_, j) => j !== i))}
+                            className="px-2 rounded-lg text-xs font-bold"
+                            style={{ color: 'var(--red)', border: '1px solid var(--dx-border)' }}
+                          >✕</button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => setFSolutionExtraUrls([...fSolutionExtraUrls, ''])}
+                        className="text-[11px] font-bold mt-1 px-3 py-1.5 rounded-lg transition-all"
+                        style={{ color: 'var(--cyan)', border: '1px dashed var(--dx-border)' }}
+                      >+ Add another URL</button>
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>{L.solutionLabel} <span style={{ color: 'var(--red)' }}>*</span></label>
-                    <input
-                      type="text"
-                      value={fSolution}
-                      onChange={(e) => setFSolution(e.target.value)}
-                      placeholder={L.solutionPlaceholder}
-                      className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
-                      style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
-                    />
+                ) : (
+                  /* ── Standard: single sender + solution ── */
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>{L.senderLabel} <span style={{ color: 'var(--red)' }}>*</span></label>
+                      <input
+                        type="text"
+                        value={fSender}
+                        onChange={(e) => setFSender(e.target.value)}
+                        placeholder={L.senderPlaceholder}
+                        autoFocus
+                        className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
+                        style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-extrabold tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>{L.solutionLabel} <span style={{ color: 'var(--red)' }}>*</span></label>
+                      <input
+                        type="text"
+                        value={fSolution}
+                        onChange={(e) => setFSolution(e.target.value)}
+                        placeholder={L.solutionPlaceholder}
+                        className="rounded-xl px-4 py-3 text-sm outline-none transition-all h-[46px]"
+                        style={{ background: 'var(--surface-2)', border: '1px solid var(--dx-border)', color: 'var(--text)' }}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
+
                 <div className="flex items-center justify-between mt-8">
                   <button
                     onClick={() => setWizardStep(0)}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold border border-drix-border text-drix-dim hover:text-drix-text hover:border-drix-accent/50 transition-all"
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all"
+                    style={{ border: '1px solid var(--dx-border)', color: 'var(--text-dim)' }}
                   >
                     ← Back
                   </button>

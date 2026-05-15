@@ -987,7 +987,9 @@ app.post('/api/demo-flow', async (req, res) => {
     individual_name,
     individual_linkedin,
     individual_email,
-    mode
+    mode,
+    sender_extra_urls,
+    solution_extra_urls
   } = req.body || {};
   const isDemo = mode === 'demo';
   const DEMO_ATOMS_PER_CATEGORY = 20;
@@ -1017,8 +1019,23 @@ app.post('/api/demo-flow', async (req, res) => {
     const t0 = Date.now();
     send('phase', { phase: 'fetch', message: 'Fetching sender, solution, customer in parallel…' });
 
+    // Primary URLs
     const senderPromise   = ingestOne({ url: normUrl(sender_company_url), role: 'sender', demoMode: isDemo });
     const solutionPromise = ingestOne({ url: normUrl(solution_url),       role: 'solution', demoMode: isDemo });
+
+    // Extra URLs (P2P multi-URL support) — ingest in parallel with the primaries
+    const senderExtraPromises = Array.isArray(sender_extra_urls)
+      ? sender_extra_urls.filter(u => u && u.trim()).map(u => ingestOne({ url: normUrl(u.trim()), role: 'sender', demoMode: isDemo }).catch(err => {
+          console.warn(`[demo-flow] extra sender URL failed (non-blocking): ${u} — ${err.message}`);
+          return null;
+        }))
+      : [];
+    const solutionExtraPromises = Array.isArray(solution_extra_urls)
+      ? solution_extra_urls.filter(u => u && u.trim()).map(u => ingestOne({ url: normUrl(u.trim()), role: 'solution', demoMode: isDemo }).catch(err => {
+          console.warn(`[demo-flow] extra solution URL failed (non-blocking): ${u} — ${err.message}`);
+          return null;
+        }))
+      : [];
     // Per cascade spec: customer_url → real ingest; industry-only → archetype
     // synth; neither → minimal "unspecified" placeholder so strategies fall
     // back to sender + solution alone rather than us inventing a target.
@@ -1035,8 +1052,9 @@ app.post('/api/demo-flow', async (req, res) => {
           });
 
     // Settle individually so one failure doesn't kill the rest
-    const [senderRes, solutionRes, customerRes] = await Promise.allSettled([
-      senderPromise, solutionPromise, customerPromise
+    const [senderRes, solutionRes, customerRes, ...extraResults] = await Promise.allSettled([
+      senderPromise, solutionPromise, customerPromise,
+      ...senderExtraPromises, ...solutionExtraPromises
     ]);
 
     if (senderRes.status === 'rejected')   throw new Error(`Sender: ${senderRes.reason.message}`);
@@ -1046,6 +1064,27 @@ app.post('/api/demo-flow', async (req, res) => {
     const sender   = senderRes.value;
     const solution = solutionRes.value;
     const customer = customerRes.value;
+
+    // Merge extra URL atoms into the primary sender/solution results
+    const senderExtraCount = senderExtraPromises.length;
+    const solutionExtraCount = solutionExtraPromises.length;
+    for (let i = 0; i < senderExtraCount; i++) {
+      const r = extraResults[i];
+      if (r && r.status === 'fulfilled' && r.value && r.value.atoms) {
+        sender.atoms = [...(sender.atoms || []), ...r.value.atoms];
+        sender.summary = (sender.summary || '') + '\n\n[Additional source: ' + (r.value.target?.url || 'extra URL') + ']\n' + (r.value.summary || '');
+      }
+    }
+    for (let i = 0; i < solutionExtraCount; i++) {
+      const r = extraResults[senderExtraCount + i];
+      if (r && r.status === 'fulfilled' && r.value && r.value.atoms) {
+        solution.atoms = [...(solution.atoms || []), ...r.value.atoms];
+        solution.summary = (solution.summary || '') + '\n\n[Additional source: ' + (r.value.target?.url || 'extra URL') + ']\n' + (r.value.summary || '');
+      }
+    }
+    if (senderExtraCount + solutionExtraCount > 0) {
+      console.log(`[demo-flow] merged ${senderExtraCount} extra sender URLs, ${solutionExtraCount} extra solution URLs`);
+    }
 
     // DEMO MODE: limit atoms to N per category (atom type)
     if (isDemo) {
