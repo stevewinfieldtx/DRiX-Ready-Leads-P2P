@@ -1218,9 +1218,9 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
   const renderHydration = (data: any) => {
     const h = data.hydration || {}
     const chosen = data.chosen_strategy || {}
-    const score = h.score || 0
+    const score = Math.max(0, Math.min(100, parseInt(chosen.confidence) || h.score || 0))
     const scoreColor =
-      score >= 80 ? 'var(--red)' : score >= 60 ? 'var(--orange)' : score >= 40 ? 'var(--yellow)' : 'var(--text-muted)'
+      score >= 80 ? 'var(--green)' : score >= 60 ? 'var(--dx-accent)' : score >= 40 ? 'var(--yellow)' : 'var(--text-muted)'
 
     const painsHtml = (h.painIndicators || [])
       .map(
@@ -1305,7 +1305,7 @@ export default function DrixApp({ mode = 'standard' }: DrixAppProps) {
         </div>
         <div style="border:2px solid ${scoreColor};border-radius:10px;padding:8px 16px;text-align:center;min-width:80px;color:${scoreColor}">
           <div style="font-size:24px;font-weight:900;line-height:1;">${score}</div>
-          <div style="font-size:9px;letter-spacing:1.5px;color:var(--text-muted);font-weight:800;margin-top:3px;">FIT SCORE</div>
+          <div style="font-size:9px;letter-spacing:1.5px;color:var(--text-muted);font-weight:800;margin-top:3px;">CONFIDENCE</div>
         </div>
       </div>
       ${h.primaryLead ? `<div style="background:var(--surface-2);border-left:3px solid var(--dx-accent);padding:10px 14px;border-radius:6px;margin-bottom:16px;"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);font-weight:800;margin-bottom:4px;">Primary lead — who to target</div><div style="font-size:14px;color:var(--text);font-weight:700;">${esc(h.primaryLead.title)} · <span style="color:var(--text-dim);font-weight:500">${esc(h.primaryLead.topic)}</span></div></div>` : ''}
