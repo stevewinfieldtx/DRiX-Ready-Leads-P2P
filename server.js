@@ -320,12 +320,18 @@ OUTPUT (JSON only):
 
 const PAIN_PROMPT = `Pain-surfacing phase of TDE. Be concise — short sentences only.
 
-INPUT: customer atoms, optional industry/sub-industry/region, optional target_title (the role the rep is pitching), is_archetype flag.
+INPUT: customer atoms, optional industry/sub-industry/region, optional target_title (the role the rep is pitching), is_archetype flag, optional sender_context (the vendor/solution being sold).
 
-Produce 2-4 pain points at each of three levels:
-  1) company_pain — specific to THIS customer (empty array if is_archetype=true)
-  2) subindustry_pain — patterns typical of the sub-industry/segment
-  3) industry_pain — broader forces affecting the whole industry
+Produce pain points at three levels:
+  1) company_pain — 2-4 pain points specific to THIS customer (empty array if is_archetype=true)
+  2) subindustry_pain — 6 pain points: patterns typical of the sub-industry/segment
+  3) industry_pain — 6 pain points: broader forces affecting the whole industry
+
+CRITICAL — VENDOR DOMAIN FOCUS: If sender_context is provided, ALL subindustry and industry pain points MUST be relevant to the vendor's domain. For example:
+  - If the vendor is a cybersecurity company → pains must be about security threats, compliance gaps, breach risks, security staffing, etc.
+  - If the vendor is an operations/automation platform → pains must be about operational inefficiency, manual processes, scalability, workflow bottlenecks, etc.
+  - If the vendor is a cloud infrastructure provider → pains must be about cloud migration, infrastructure costs, uptime, multi-cloud complexity, etc.
+Do NOT produce generic business pains (e.g. "revenue pressure", "talent retention") unless they directly connect to what the vendor actually solves. The pain points should make sense as problems this specific vendor could address.
 
 If target_title is provided, weight pain points toward what that role personally owns and bias persona_primary.title to match target_title where the atom supports it. Interpret target_title through whatever context is also supplied (industry / subindustry / customer atoms) — a CFO at a regional bank has different pain than a CFO at a SaaS startup. If target_title is null, treat persona selection as open and pick what the atoms most clearly point to.
 
@@ -927,16 +933,16 @@ async function synthesizeCustomerArchetype({ industry, subindustry, region, demo
   return archetype;
 }
 
-async function extractPainPoints(customerEntry, { industry, subindustry, recipient_role } = {}) {
+async function extractPainPoints(customerEntry, { industry, subindustry, recipient_role, senderEntry } = {}) {
   const isArchetype = !!customerEntry.target?.is_archetype;
   const ind = industry || customerEntry.industry || null;
   const subInd = subindustry || customerEntry.subindustry || null;
   const targetTitle = recipient_role || null;
 
-  // Cache key: customer atoms + industry + subindustry + target title
-  // (target title is in the key so swapping CTO → CFO doesn't return cached
-  // CTO pain points; per the cascade spec, Title materially changes pain.)
-  const pk = cacheKey({ atoms: customerEntry.atoms, industry: ind, subindustry: subInd, target_title: targetTitle });
+  // Cache key: customer atoms + industry + subindustry + target title + sender name
+  // (sender context changes the pain domain focus, so it must be in the key)
+  const senderName = senderEntry?.target?.name || null;
+  const pk = cacheKey({ atoms: customerEntry.atoms, industry: ind, subindustry: subInd, target_title: targetTitle, sender_name: senderName });
 
   // 1. In-memory cache
   if (painCache.has(pk)) {
@@ -954,7 +960,7 @@ async function extractPainPoints(customerEntry, { industry, subindustry, recipie
 
   // 3. Fresh LLM call
   console.log(`[pain] Cache miss — calling LLM (${pk})`);
-  const userContent = JSON.stringify({
+  const painInput = {
     is_archetype: isArchetype,
     industry: ind, subindustry: subInd,
     target_title: targetTitle,
@@ -963,8 +969,20 @@ async function extractPainPoints(customerEntry, { industry, subindustry, recipie
       summary: customerEntry.summary,
       atoms: customerEntry.atoms
     }
-  });
-  const parsed = await callLLM(PAIN_PROMPT, userContent, { maxTokens: 4000 });
+  };
+  // Include sender context so pain points are focused on the vendor's domain
+  if (senderEntry) {
+    painInput.sender_context = {
+      name: senderEntry.target?.name,
+      summary: senderEntry.summary,
+      // Send a subset of atoms to keep token count reasonable
+      domain_atoms: (senderEntry.atoms || []).filter(a =>
+        ['value_proposition', 'capability', 'product', 'solution', 'technology'].includes(a.type)
+      ).slice(0, 15)
+    };
+  }
+  const userContent = JSON.stringify(painInput);
+  const parsed = await callLLM(PAIN_PROMPT, userContent, { maxTokens: 6000 });
   const result = {
     company_pain:     Array.isArray(parsed.company_pain)     ? parsed.company_pain     : [],
     subindustry_pain: Array.isArray(parsed.subindustry_pain) ? parsed.subindustry_pain : [],
@@ -1286,7 +1304,7 @@ app.post('/api/demo-flow', async (req, res) => {
     // ── PHASE 3: Pain points — dedicated LLM pass that always returns company,
     //    sub-industry, and industry pain groups (not just an atom-type filter).
     send('phase', { phase: 'pain', message: 'Surfacing company, sub-industry, industry pain…' });
-    const pain_groups = await extractPainPoints(customer, { industry, subindustry, recipient_role });
+    const pain_groups = await extractPainPoints(customer, { industry, subindustry, recipient_role, senderEntry: sender });
     const pain_points = [
       ...pain_groups.company_pain,
       ...pain_groups.subindustry_pain,
